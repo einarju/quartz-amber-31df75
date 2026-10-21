@@ -1,0 +1,101 @@
+/* Holding dashboard additions. Everything else comes from the shared centre design system. */
+
+.page-head { display: flex; flex-direction: column; gap: var(--s-2); }
+.lede { color: var(--text); max-width: 70ch; }
+.small { font-size: var(--step--1); }
+.pre { white-space: pre-wrap; color: var(--muted); }
+
+/* hero */
+.hero { display: grid; grid-template-columns: auto 1fr; gap: var(--s-7); align-items: center; }
+.hero__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-5) var(--s-6); }
+@media (max-width: 1100px) {
+  .hero { grid-template-columns: 1fr; justify-items: start; }
+  .hero__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+}
+
+/* business cards */
+.biz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--gutter); }
+.biz {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: flex; flex-direction: column; gap: var(--s-3);
+  padding: var(--s-5); border-radius: var(--r-lg);
+  background: var(--bg); box-shadow: var(--lift-2);
+  transition: box-shadow var(--fast) var(--ease), transform var(--fast) var(--ease);
+  min-width: 0;
+}
+.biz:hover { box-shadow: var(--lift-3); transform: translateY(-1px); }
+.biz:focus-visible { outline: 2px solid var(--biz, var(--accent)); outline-offset: 3px; }
+.biz__head { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
+.biz__num {
+  flex: none; width: 34px; height: 34px; border-radius: var(--r-sm);
+  display: grid; place-items: center; color: #fff; font-weight: 650; font-variant-numeric: tabular-nums;
+  box-shadow: var(--lift-1);
+}
+.biz__name { flex: 1 1 auto; font-weight: 650; font-size: var(--step-1); }
+.biz__bar { display: grid; grid-template-columns: 84px 1fr 42px; align-items: center; gap: var(--s-3); }
+.biz__label { color: var(--muted); font-size: var(--step--1); }
+.biz__pct { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; font-size: var(--step--1); font-weight: 650; }
+.biz__next { color: var(--faint); font-size: var(--step--1); }
+
+/* lists */
+.steps { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--s-1); color: var(--muted); }
+.todo-form { display: grid; grid-template-columns: 1fr 150px 170px auto; gap: var(--s-2); align-items: center; }
+@media (max-width: 1100px) { .todo-form { grid-template-columns: 1fr 1fr; } }
+
+/* payments calendar */
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s-2); }
+.cal__dow { color: var(--faint); font-size: var(--step--1); text-align: center; padding-bottom: var(--s-1); }
+.cal__cell {
+  min-height: 92px; border-radius: var(--r-sm); padding: var(--s-2);
+  box-shadow: var(--press-1); display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.cal__cell--empty { box-shadow: none; }
+.cal__cell[data-today='true'] { box-shadow: var(--press-1), 0 0 0 2px var(--accent-glow); }
+.cal__day { color: var(--muted); font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+.cal__cell[data-today='true'] .cal__day { color: var(--accent); font-weight: 650; }
+.chip {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column;
+  padding: 3px 6px; border-radius: var(--r-xs); font-size: 11px; line-height: 1.3;
+  background: var(--accent-grad); color: #fff; min-width: 0;
+}
+.chip b { font-weight: 650; }
+.chip[data-paid='true'] { background: none; color: var(--positive); box-shadow: inset 0 0 0 1px var(--positive); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.pay-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-3); }
+.pay-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: var(--step--1); }
+.pay-form__wide { grid-column: span 2; }
+@media (max-width: 900px) { .pay-form { grid-template-columns: 1fr 1fr; } }
+
+/* sign-in */
+.login { min-height: 100%; display: grid; place-items: center; padding: var(--s-5); }
+.login .card { width: min(420px, 100%); }
+.login__mark {
+  width: 52px; height: 52px; border-radius: var(--r-md); display: grid; place-items: center;
+  box-shadow: var(--press-1); font-weight: 650; font-size: var(--step-2);
+  background: var(--accent-grad); background-clip: text; -webkit-background-clip: text; color: transparent;
+}
+.negative { color: var(--negative); }
+.rail__foot { margin-top: auto; }
+
+/* phone: the rail becomes a bottom bar, everything stacks */
+@media (max-width: 720px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .rail {
+    grid-row: 2; flex-direction: row; justify-content: space-around;
+    padding: var(--s-2) var(--s-3) calc(var(--s-2) + env(safe-area-inset-bottom, 0px));
+  }
+  .rail__mark, .rail__tip { display: none; }
+  .rail__foot { margin-top: 0; flex-direction: row; gap: var(--s-3); }
+  .rail__btn { width: 42px; height: 42px; }
+  .main { grid-row: 1; padding: var(--s-4) var(--s-4) var(--s-6); }
+  .grid--2, .grid--3, .grid--4 { grid-template-columns: minmax(0, 1fr); }
+  .hero__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-4); }
+  .biz-grid { grid-template-columns: minmax(0, 1fr); }
+  .todo-form { grid-template-columns: minmax(0, 1fr); }
+  .cal { gap: 3px; }
+  .cal__cell { min-height: 58px; padding: 3px; }
+  .chip span { display: none; }
+  .pay-form { grid-template-columns: minmax(0, 1fr); }
+  .pay-form__wide { grid-column: auto; }
+}

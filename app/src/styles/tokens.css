@@ -1,0 +1,152 @@
+/*
+ * DESIGN TOKENS - neumorphism, dark.
+ *
+ * Neumorphism has one rule: every surface is the SAME colour as the page.
+ * Shape comes only from two shadows - a dark one bottom-right, a light one
+ * top-left. There are no borders and no panel fills anywhere in this app.
+ * Raised = outer shadows. Pressed / inset / "a slot things sit in" = inset.
+ *
+ * Nothing outside this file hardcodes a colour, size, radius, or duration.
+ * Change a value here and the whole dashboard follows.
+ */
+
+:root {
+  /* ---------------------------------------------------------- foundation */
+
+  /* The one surface colour. Cards, buttons, the page - all of it is this. */
+  --bg: #26292f;
+
+  /* The two lights that carve everything. Tune these and the whole app
+     changes material: raise the dark for deeper relief, raise the light for
+     a softer, chalkier plastic. */
+  --shadow-dark: rgba(0, 0, 0, 0.58);
+  --shadow-light: rgba(255, 255, 255, 0.045);
+
+  /* Slightly sunk regions (page gutters, table stripes) need a hair of
+     tint, since a pure inset shadow alone reads as noise at small sizes. */
+  --sunk: rgba(0, 0, 0, 0.14);
+  --raised-tint: rgba(255, 255, 255, 0.018);
+
+  /* ---------------------------------------------------------------- ink */
+
+  /* Neumorphism is naturally low-contrast. The SHAPES get to be subtle;
+     the text does not. These stay high-contrast on purpose. */
+  --text: #eef1f6;
+  --muted: #949cab;
+  --faint: #626a77;
+  --ghost: rgba(255, 255, 255, 0.08);
+
+  /* -------------------------------------------------------------- accent */
+
+  /* Orange is the app accent - the money, the primary action, the live
+     state. Everything else in this list belongs to a project. */
+  --accent: #ff6a1a;
+  --accent-2: #ff3d00;
+  --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --accent-glow: rgba(255, 106, 26, 0.35);
+
+  --orange: #ff6a1a;
+  --orange-grad: linear-gradient(135deg, #ff8a3d, #ff3d00);
+  --violet: #a855f7;
+  --violet-grad: linear-gradient(135deg, #c084fc, #7c3aed);
+  --cyan: #22d3ee;
+  --cyan-grad: linear-gradient(135deg, #67e8f9, #0891b2);
+  --lime: #a3e635;
+  --lime-grad: linear-gradient(135deg, #bef264, #65a30d);
+  --pink: #ec4899;
+  --pink-grad: linear-gradient(135deg, #f9a8d4, #db2777);
+
+  --positive: #34d399;
+  --negative: #fb5b6d;
+  --warn: #fbbf24;
+
+  /* -------------------------------------------------------------- relief */
+
+  /* Raised, in three depths. Small controls use 1, cards use 2, the hero
+     card uses 3. Never invent a fourth - it stops reading as one material. */
+  --lift-1: 4px 4px 9px var(--shadow-dark), -4px -4px 9px var(--shadow-light);
+  --lift-2: 8px 8px 18px var(--shadow-dark), -7px -7px 16px var(--shadow-light);
+  --lift-3: 14px 14px 32px var(--shadow-dark), -10px -10px 26px var(--shadow-light);
+
+  /* Pressed. Buttons take press-1 on :active, wells and tracks take press-2. */
+  --press-1: inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+  --press-2: inset 6px 6px 13px var(--shadow-dark), inset -5px -5px 12px var(--shadow-light);
+
+  /* Coloured halo under an active control. Applied on top of a lift. */
+  --halo: 0 6px 20px -4px var(--accent-glow);
+
+  /* -------------------------------------------------------------- shape */
+
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 26px;
+  --r-xl: 34px;
+  --r-pill: 999px;
+
+  /* --------------------------------------------------------------- type */
+
+  --font: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --step--2: 10px;
+  --step--1: 11.5px;
+  --step-0: 13px;
+  --step-1: 15px;
+  --step-2: 18px;
+  --step-3: 23px;
+  --step-4: 32px;
+  --step-5: 46px;
+  --step-6: 68px;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-bold: 650;
+
+  /* -------------------------------------------------------------- space */
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 22px;
+  --s-6: 30px;
+  --s-7: 40px;
+  --s-8: 56px;
+
+  /* Neumorphism needs air - shadows are 20px wide and cannot overlap or the
+     material breaks. This is the minimum gap between two raised things. */
+  --gutter: var(--s-5);
+
+  --rail-width: 76px;
+  --content-max: 1320px;
+
+  /* ------------------------------------------------------------- motion */
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 130ms;
+  --slow: 340ms;
+}
+
+/*
+ * Light neumorphism - the other half of the reference set. Only the
+ * foundation and ink change; relief, shape, type and motion are shared.
+ * Set data-theme="light" on <html> to switch.
+ */
+:root[data-theme='light'] {
+  --bg: #e8ebf0;
+  --shadow-dark: rgba(163, 172, 187, 0.62);
+  --shadow-light: rgba(255, 255, 255, 0.95);
+  --sunk: rgba(163, 172, 187, 0.14);
+  --raised-tint: rgba(255, 255, 255, 0.4);
+
+  --text: #2b3038;
+  --muted: #6d7686;
+  --faint: #98a1b0;
+  --ghost: rgba(43, 48, 56, 0.08);
+
+  --accent-glow: rgba(255, 106, 26, 0.28);
+  --positive: #10a37f;
+  --negative: #e11d48;
+}

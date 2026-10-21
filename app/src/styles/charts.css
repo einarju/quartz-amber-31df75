@@ -1,0 +1,205 @@
+/**
+ * Charts.
+ *
+ * The neumorphic rule holds here too: a chart sits in a pressed-in well, and
+ * the only colour on the page is the data itself. Animation is a single
+ * draw-in on first paint — enough to say "this is a shape, read it", not a
+ * transition that replays every time state changes.
+ */
+
+.chart__wrap {
+  position: relative;
+  width: 100%;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.chart--empty {
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  font-size: var(--step--1);
+  border-radius: var(--r-md);
+  box-shadow: var(--press-1);
+  min-height: 56px;
+  padding: var(--s-4);
+}
+
+/**
+ * The draw-in is a left-to-right wipe, not a stroke-dash animation.
+ *
+ * `stroke-dasharray` is computed in user units, and these charts stretch a
+ * 100x100 viewBox to fill an arbitrary box — so a dash pattern that should
+ * cover the whole path instead renders as a row of disconnected dashes.
+ * Clipping the SVG element works in CSS pixels and is immune to that.
+ *
+ * Written as a keyframe animation whose *resting* state is fully visible,
+ * rather than a JS-toggled class. If the animation never runs — background
+ * tab, reduced motion, an old engine — the chart is simply there. The
+ * decorative version must never be the one that can fail closed.
+ */
+.chart {
+  clip-path: inset(0 0 0 0);
+  animation: chart-wipe 900ms var(--ease-out);
+}
+
+@keyframes chart-wipe {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+.chart__area {
+  opacity: 1;
+  animation: chart-fade 600ms var(--ease) 250ms backwards;
+}
+
+@keyframes chart-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.chart__grid {
+  stroke: var(--ghost);
+  stroke-width: 1;
+}
+
+.chart__target {
+  stroke: var(--positive);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: 0.7;
+}
+
+.chart__cursor {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+/* Markers are HTML because the SVG viewBox is stretched to fill its box. */
+.chart__dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--chart-color, var(--accent));
+  box-shadow: 0 0 0 3px var(--bg), 0 0 12px var(--accent-glow);
+  pointer-events: none;
+  opacity: 1;
+  animation: chart-fade 300ms var(--ease) 750ms backwards;
+}
+
+.chart__dot--lg {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  animation: none;
+}
+
+.chart__legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+  font-size: var(--step--1);
+  color: var(--faint);
+}
+
+.chart__readout {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------- columns */
+
+.cols__plot {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  box-shadow: var(--press-1);
+}
+
+.cols__group {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--s-2);
+}
+
+.cols__pair {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  min-height: 0;
+}
+
+.cols__bar {
+  width: 100%;
+  max-width: 22px;
+  border-radius: var(--r-xs) var(--r-xs) 2px 2px;
+  /* Grow from the baseline rather than fading in. Resting state is grown, for
+     the same fail-open reason as the line wipe above. */
+  transform: scaleY(1);
+  transform-origin: bottom;
+  animation: cols-grow 520ms var(--ease-out) backwards;
+  min-height: 2px;
+}
+
+@keyframes cols-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+.cols__bar--b { opacity: 0.55; }
+
+.cols__label {
+  text-align: center;
+  font-size: var(--step--2);
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cols__key {
+  display: flex;
+  gap: var(--s-4);
+  justify-content: center;
+  margin-top: var(--s-3);
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+.cols__key span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.cols__key i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* An animation that repeats on every re-render is noise, so honour the
+   system preference by simply showing the finished state. */
+@media (prefers-reduced-motion: reduce) {
+  .chart,
+  .chart__area,
+  .chart__dot,
+  .cols__bar { animation: none; }
+}
