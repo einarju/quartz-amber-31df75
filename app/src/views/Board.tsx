@@ -1,6 +1,6 @@
 import type { Business, Engine } from '@shared/schema.ts'
 import { ENGINE_ACCENT, ENGINE_LABEL } from '@shared/schema.ts'
-import { Bar, Card, Eyebrow, Pill, Ring, Stat, accentColor, accentGrad } from '../components/ui.tsx'
+import { Card, Eyebrow, Ring, Stat, accentColor } from '../components/ui.tsx'
 import { compact, inCurrency, money } from '../lib/format.ts'
 import { occurrences, shortDate, today, addDays, toUsd } from '../lib/dates.ts'
 import { useAppState } from '../lib/store.tsx'
@@ -9,27 +9,37 @@ const ENGINES: Engine[] = ['visual', 'ableton', 'audience', 'launch', 'sandbox']
 
 export const STAGE_LABEL = { build: 'Building', automation: 'Automating', 'self-running': 'Self-running' } as const
 
-export function BizCard({ b, onGo }: { b: Business; onGo: (r: string) => void }) {
-  const accent = ENGINE_ACCENT[b.engine]
+const SEGMENTS = 16
+
+/** One LED column. Any progress above zero lights at least one segment, so 5% still shows. */
+function Meter({ pct, color, label }: { pct: number; color: string; label: string }) {
+  const lit = pct > 0 ? Math.max(1, Math.round((pct / 100) * SEGMENTS)) : 0
   return (
-    <button type="button" className="biz" onClick={() => onGo(`biz/${b.file}`)}
-      style={{ '--biz': accentColor(accent) } as React.CSSProperties}>
-      <div className="biz__head">
-        <span className="biz__num" style={{ background: accentGrad(accent) }}>{b.id}</span>
-        <span className="biz__name truncate">{b.name}</span>
-        <Pill tone={b.stage === 'build' ? undefined : 'positive'} inset>{STAGE_LABEL[b.stage]}</Pill>
-      </div>
-      <div className="biz__bar">
-        <span className="biz__label">Build</span>
-        <Bar pct={b.buildBar.pct / 100} fill={accentGrad(accent)} />
-        <span className="biz__pct">{b.buildBar.pct}%</span>
-      </div>
-      <div className="biz__bar">
-        <span className="biz__label">Automation</span>
-        <Bar pct={b.automationBar.pct / 100} fill="var(--text)" />
-        <span className="biz__pct">{b.automationBar.pct}%</span>
-      </div>
-      <div className="biz__next truncate">{b.nextSteps[0] ? `Next: ${b.nextSteps[0]}` : 'No next step written'}</div>
+    <div className="meter" aria-label={`${label} ${pct}%`} role="img" style={{ '--c': color } as React.CSSProperties}>
+      {Array.from({ length: SEGMENTS }, (_, i) => <i key={i} data-on={i < lit} />)}
+    </div>
+  )
+}
+
+/** A mixing-console channel strip per business: number, engine colour, Build and Automation meters. */
+export function Strip({ b, onGo }: { b: Business; onGo: (r: string) => void }) {
+  const color = accentColor(ENGINE_ACCENT[b.engine])
+  return (
+    <button type="button" className="strip" data-quarantine={b.engine === 'sandbox'}
+      style={{ '--eng': color } as React.CSSProperties}
+      title={`#${b.id} ${b.name} · ${STAGE_LABEL[b.stage]}${b.nextSteps[0] ? `
+Next: ${b.nextSteps[0]}` : ''}`}
+      onClick={() => onGo(`biz/${b.file}`)}>
+      <span className="strip__num">{b.id}</span>
+      <span className="strip__chip" />
+      <span className="strip__meters">
+        <Meter pct={b.buildBar.pct} color={color} label="Build" />
+        <Meter pct={b.automationBar.pct} color="var(--text)" label="Automation" />
+      </span>
+      <span className="strip__readout">
+        <span>B <b>{b.buildBar.pct}</b></span>
+        <span>A <b>{b.automationBar.pct}</b></span>
+      </span>
     </button>
   )
 }
@@ -50,6 +60,30 @@ export function Board({ onGo }: { onGo: (r: string) => void }) {
         <h1>Board</h1>
       </header>
 
+
+      <Card title="The board" actions={<span className="muted small">B = Build · A = Automation · click a channel</span>}>
+        <div className="console-scroll">
+          <div className="console">
+            {s.businesses.map((b) => <Strip key={b.file} b={b} onGo={onGo} />)}
+          </div>
+        </div>
+        <div className="console-key">
+          {ENGINES.map((e) => (
+            <div key={e} className="console-key__group">
+              <span className="row" style={{ gap: 'var(--s-2)' }}>
+                <span className="dot" style={{ background: accentColor(ENGINE_ACCENT[e]) }} />
+                <Eyebrow>{ENGINE_LABEL[e]}</Eyebrow>
+              </span>
+              {s.businesses.filter((b) => b.engine === e).map((b) => (
+                <button key={b.file} type="button" className="link console-key__item" onClick={() => onGo(`biz/${b.file}`)}>
+                  <b>{b.id}</b> {b.name}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </Card>
+
       <Card hero>
         <div className="hero">
           <Ring pct={t.revenueMtdUsd / s.goalMonthlyUsd} value={`$${compact(t.revenueMtdUsd)}`} label={`of $${compact(s.goalMonthlyUsd)}`} />
@@ -67,22 +101,6 @@ export function Board({ onGo }: { onGo: (r: string) => void }) {
           </div>
         </div>
       </Card>
-
-      {ENGINES.map((e) => {
-        const list = s.businesses.filter((b) => b.engine === e)
-        if (!list.length) return null
-        return (
-          <section key={e} className="col" style={{ gap: 'var(--s-3)' }}>
-            <div className="row" style={{ gap: 'var(--s-2)' }}>
-              <span className="dot" style={{ background: accentColor(ENGINE_ACCENT[e]) }} />
-              <Eyebrow>{ENGINE_LABEL[e]}</Eyebrow>
-            </div>
-            <div className="biz-grid">
-              {list.map((b) => <BizCard key={b.file} b={b} onGo={onGo} />)}
-            </div>
-          </section>
-        )
-      })}
 
       {upcoming.length > 0 && (
         <Card title="Next payments">
