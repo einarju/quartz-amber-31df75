@@ -113,10 +113,9 @@
 }
 .strip:hover { box-shadow: var(--press-1), 0 0 0 1px var(--eng); transform: translateY(-1px); }
 .strip:focus-visible { outline: 2px solid var(--eng); outline-offset: 2px; }
+/* #7 sandbox: same solid top as the rest, set apart only by the hatch */
 .strip[data-quarantine='true'] {
-  border-top-style: dashed;
-  background: repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 9px, transparent 9px 18px), var(--sunk, rgba(0,0,0,0.18));
-  outline: 1px dashed var(--faint); outline-offset: -1px;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,0.03) 0 9px, transparent 9px 18px), var(--sunk, rgba(0,0,0,0.18));
 }
 .strip__num {
   font-family: 'Big Shoulders Display', 'Arial Narrow', var(--font); font-weight: 900;
@@ -162,7 +161,8 @@
 /* light running along each strip's coloured top edge, staggered across the console */
 .strip { position: relative; }
 .strip::before {
-  content: ''; position: absolute; left: 0; right: 0; top: -4px; height: 4px; border-radius: 4px 4px 0 0;
+  /* inset by the corner radius: a 4px-tall box cannot round like the strip, so it stays on the straight edge */
+  content: ''; position: absolute; left: var(--r-sm); right: var(--r-sm); top: -4px; height: 4px; border-radius: 2px;
   background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.85) 50%, transparent 100%) no-repeat;
   background-size: 40% 100%; mix-blend-mode: overlay; pointer-events: none;
   animation: edge-run 3.2s linear infinite; animation-delay: calc(var(--idx) * -0.29s);
