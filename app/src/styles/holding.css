@@ -122,9 +122,14 @@
   font-family: 'Big Shoulders Display', 'Arial Narrow', var(--font); font-weight: 900;
   font-size: 46px; line-height: 0.95; color: var(--text); font-variant-numeric: tabular-nums;
 }
-.strip__chip { width: 100%; height: 8px; border-radius: 2px; background: var(--eng); opacity: 0.38; }
+.strip__chip {
+  width: 100%; height: 8px; border-radius: 2px;
+  background: repeating-linear-gradient(110deg, color-mix(in srgb, var(--eng) 55%, transparent) 0 8px, color-mix(in srgb, var(--eng) 25%, transparent) 8px 16px);
+  background-size: 32px 100%;
+  animation: chip-flow 1.8s linear infinite;
+}
 .strip__meters { display: flex; gap: 8px; height: 230px; }
-.meter { width: 22px; height: 100%; display: flex; flex-direction: column-reverse; gap: 4px; }
+.meter { position: relative; width: 22px; height: 100%; display: flex; flex-direction: column-reverse; gap: 4px; }
 .meter i { flex: 1; border-radius: 2px; background: rgba(255, 255, 255, 0.045); }
 .meter i[data-on='true'] { background: var(--c); box-shadow: 0 0 7px color-mix(in srgb, var(--c) 45%, transparent); }
 .strip__readout {
@@ -141,3 +146,95 @@
 .console-key__item b { color: var(--text); margin-right: 4px; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .console-key { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .strip__meters { height: 170px; } .meter { width: 16px; } .strip__num { font-size: 38px; } }
+
+/* ===================================================== ambient motion (always on) */
+
+.console { position: relative; }
+/* scanner light sweeping across the whole console */
+.console::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 16%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  pointer-events: none; mix-blend-mode: screen;
+  animation: sweep 7s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+@keyframes sweep { from { transform: translateX(-120%); } to { transform: translateX(720%); } }
+
+/* light running along each strip's coloured top edge, staggered across the console */
+.strip { position: relative; }
+.strip::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -4px; height: 4px; border-radius: 4px 4px 0 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.85) 50%, transparent 100%) no-repeat;
+  background-size: 40% 100%; mix-blend-mode: overlay; pointer-events: none;
+  animation: edge-run 3.2s linear infinite; animation-delay: calc(var(--idx) * -0.29s);
+}
+@keyframes edge-run { from { background-position: -60% 0; } to { background-position: 160% 0; } }
+
+@keyframes chip-flow { from { background-position: 0 0; } to { background-position: 32px 0; } }
+
+/* numbers glow in a wave from 1 to 11 */
+.strip__num { animation: num-glow 4.4s ease-in-out infinite; animation-delay: calc(var(--idx) * 0.2s); }
+@keyframes num-glow {
+  0%, 100% { text-shadow: none; }
+  50% { text-shadow: 0 0 18px color-mix(in srgb, var(--eng) 75%, transparent), 0 0 3px color-mix(in srgb, var(--eng) 60%, transparent); }
+}
+
+/* lit segments breathe in a wave from the bottom up */
+.meter i[data-on='true'] {
+  animation: led-breathe 2.6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.14s - var(--seed) * 0.31s);
+}
+@keyframes led-breathe {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.45); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 70%, transparent); }
+}
+
+/* unlit segments: faint idle flicker, scattered by index and seed */
+.meter i:not([data-on='true']) {
+  animation: led-idle 9s steps(1) infinite;
+  animation-delay: calc(var(--i) * -1.37s - var(--seed) * 2.11s);
+}
+@keyframes led-idle {
+  0%, 91%, 100% { background: rgba(255, 255, 255, 0.045); }
+  92% { background: rgba(255, 255, 255, 0.13); }
+  94% { background: rgba(255, 255, 255, 0.08); }
+}
+
+/* the dancing peak light just above the real level */
+.meter__peak {
+  position: absolute; left: 0; right: 0;
+  height: calc((100% - 60px) / 16);
+  bottom: calc(var(--peak) * ((100% - 60px) / 16 + 4px));
+  border-radius: 2px; background: var(--c); opacity: 0.32;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent);
+  animation: peak-dance calc(2.3s + var(--seed) * 0.17s) infinite;
+  animation-delay: calc(var(--seed) * -0.41s);
+}
+@keyframes peak-dance {
+  0%   { transform: translateY(0); opacity: 0.18; animation-timing-function: steps(1); }
+  18%  { transform: translateY(calc(-100% - 4px)); opacity: 0.38; animation-timing-function: steps(1); }
+  30%  { transform: translateY(calc(-200% - 8px)); opacity: 0.3; animation-timing-function: steps(1); }
+  44%  { transform: translateY(calc(-100% - 4px)); opacity: 0.26; animation-timing-function: steps(1); }
+  62%  { transform: translateY(0); opacity: 0.2; animation-timing-function: steps(1); }
+  76%  { transform: translateY(calc(-100% - 4px)); opacity: 0.34; animation-timing-function: steps(1); }
+  88%  { transform: translateY(0); opacity: 0.16; animation-timing-function: steps(1); }
+  100% { transform: translateY(0); opacity: 0.18; }
+}
+
+/* oscilloscope under the console */
+.scope {
+  height: 70px; margin-top: var(--s-4); border-radius: var(--r-sm); box-shadow: var(--press-1); overflow: hidden;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 50px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 17px);
+}
+.scope svg { width: 100%; height: 100%; display: block; }
+.scope path {
+  fill: none; stroke-width: 1.6; opacity: 0.6; vector-effect: non-scaling-stroke;
+  transform-box: fill-box; animation: scope-run linear infinite;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+@keyframes scope-run { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .console::after, .strip::before, .strip__chip, .strip__num, .meter i, .meter__peak, .scope path { animation: none !important; }
+}
