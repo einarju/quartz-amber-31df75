@@ -41,7 +41,7 @@ export type Business = {
   url: string
   repo: string
   money: Record<MoneyField, number | null>
-  accounts: { key: string; value: string }[]
+  accounts: Account[]
   summary: string
   build: CheckItem[]
   automation: CheckItem[]
@@ -76,6 +76,39 @@ export type Payment = {
   active: boolean
 }
 
+/** accounts.md: every email, domain, handle, store and Meta asset, one row per business and kind. */
+export type AccountStatus = 'planned' | 'created' | 'live'
+
+/** Layer 1 identity, 2 channels, 3 money, 4 details (the build order on the plan page). */
+export const ACCOUNT_KINDS = [
+  { id: 'email', label: 'Email', layer: 1, hint: 'name@gmail.com' },
+  { id: 'domain', label: 'Domain', layer: 1, hint: 'brand.com' },
+  { id: 'instagram', label: 'Instagram', layer: 2, hint: '@handle' },
+  { id: 'facebook', label: 'Facebook', layer: 2, hint: 'Page name' },
+  { id: 'youtube', label: 'YouTube', layer: 2, hint: '@channel' },
+  { id: 'x', label: 'X', layer: 2, hint: '@handle' },
+  { id: 'tiktok', label: 'TikTok', layer: 2, hint: '@handle' },
+  { id: 'soundcloud', label: 'SoundCloud', layer: 2, hint: 'soundcloud.com/name' },
+  { id: 'beatstars', label: 'BeatStars', layer: 2, hint: 'store name' },
+  { id: 'store', label: 'Store', layer: 3, hint: 'Gumroad, Stripe, ticketing' },
+  { id: 'meta', label: 'Meta portfolio', layer: 4, hint: 'portfolio name' },
+  { id: 'ad_account', label: 'Ad account', layer: 4, hint: 'account id or name' },
+  { id: 'card', label: 'Card', layer: 4, hint: 'card nickname, never the number' },
+  { id: 'vault', label: 'Vault', layer: 4, hint: 'vault entry name' },
+  { id: 'wallet', label: 'Wallet', layer: 4, hint: 'wallet nickname' },
+] as const
+
+export type AccountKind = (typeof ACCOUNT_KINDS)[number]['id']
+
+export type Account = {
+  business: string // "1".."11"
+  kind: AccountKind
+  value: string
+  status: AccountStatus
+  phone: '' | 'main' | 'second' // which SIM verified it, never the number
+  note: string
+}
+
 export type PaymentsFile = { usd_mxn: number; eur_usd: number; payments: Payment[] }
 
 export type Totals = {
@@ -94,6 +127,7 @@ export type AppState = {
   foundation: Foundation
   todos: Todo[]
   payments: PaymentsFile
+  accounts: Account[]
   totals: Totals
   goalMonthlyUsd: number
 }

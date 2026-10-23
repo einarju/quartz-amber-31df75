@@ -238,3 +238,36 @@
 @media (prefers-reduced-motion: reduce) {
   .console::after, .strip::before, .strip__chip, .strip__num, .meter i, .meter__peak, .scope path { animation: none !important; }
 }
+
+/* ------------------------------------------------------------ The 11 (accounts) */
+.acct th, .acct td { padding: 6px 4px; white-space: nowrap; }
+.table.acct { width: auto; }
+.acct thead th { font-size: var(--step--1); }
+.acct tbody th { text-align: left; font-weight: 500; }
+.acct-biz { display: flex; align-items: center; gap: var(--s-2); color: inherit; text-decoration: none; max-width: 190px; }
+.acct-biz:hover { color: var(--accent); }
+.acct-biz__n { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: var(--step--1); color: var(--muted); }
+.acct-meter { display: flex; gap: 3px; margin-top: 5px; padding-left: 26px; }
+.acct-meter i { width: 10px; height: 4px; border-radius: 1px; background: var(--muted); opacity: 0.3; }
+.acct-meter i[data-on='true'] { background: var(--positive); opacity: 1; box-shadow: 0 0 6px var(--positive); }
+.acct-cell {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; max-width: 156px; min-height: 30px;
+  padding: 4px 8px; border: 1px solid transparent; border-radius: var(--r-sm); background: none;
+  color: inherit; font: inherit; font-size: var(--step--1); text-align: left; cursor: pointer;
+}
+.acct-cell:hover { background: var(--sunk); }
+.acct-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.acct-cell[data-status='planned'] { border: 1px dashed var(--muted); color: var(--muted); }
+.acct-cell--empty { justify-content: center; color: var(--muted); opacity: 0.25; }
+.acct-cell--empty:hover, .acct-cell--empty:focus-visible { opacity: 0.8; }
+.acct-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.acct-dot[data-status='live'] { background: var(--positive); box-shadow: 0 0 6px var(--positive); }
+.acct-dot[data-status='created'] { background: var(--warn); }
+.acct-dot[data-status='planned'] { box-shadow: inset 0 0 0 1.5px var(--muted); }
+.acct-sim {
+  flex: none; margin-left: auto; padding: 0 4px; border-radius: 3px; font-style: normal;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px;
+  color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent);
+}
+.acct-legend { display: flex; flex-wrap: wrap; gap: var(--s-4); margin-top: var(--s-3); }
+.acct-legend span { display: inline-flex; align-items: center; gap: 6px; }
