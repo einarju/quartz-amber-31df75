@@ -81,8 +81,8 @@ export type AccountStatus = 'planned' | 'created' | 'live'
 
 /** Layer 1 identity, 2 channels, 3 money, 4 details (the build order on the plan page). */
 export const ACCOUNT_KINDS = [
-  { id: 'email', label: 'Email', layer: 1, hint: 'name@gmail.com' },
   { id: 'domain', label: 'Domain', layer: 1, hint: 'brand.com' },
+  { id: 'email', label: 'Email', layer: 1, hint: 'hello@brand.com' },
   { id: 'instagram', label: 'Instagram', layer: 2, hint: '@handle' },
   { id: 'facebook', label: 'Facebook', layer: 2, hint: 'Page name' },
   { id: 'youtube', label: 'YouTube', layer: 2, hint: '@channel' },
@@ -90,6 +90,7 @@ export const ACCOUNT_KINDS = [
   { id: 'tiktok', label: 'TikTok', layer: 2, hint: '@handle' },
   { id: 'soundcloud', label: 'SoundCloud', layer: 2, hint: 'soundcloud.com/name' },
   { id: 'beatstars', label: 'BeatStars', layer: 2, hint: 'store name' },
+  { id: 'whatsapp', label: 'WhatsApp', layer: 2, hint: 'business name (which SIM below)' },
   { id: 'store', label: 'Store', layer: 3, hint: 'Gumroad, Stripe, ticketing' },
   { id: 'meta', label: 'Meta portfolio', layer: 4, hint: 'portfolio name' },
   { id: 'ad_account', label: 'Ad account', layer: 4, hint: 'account id or name' },
