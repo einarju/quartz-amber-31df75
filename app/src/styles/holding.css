@@ -244,15 +244,15 @@
 .table.acct { width: auto; }
 .acct thead th { font-size: var(--step--1); }
 .acct tbody th { text-align: left; font-weight: 500; }
-.acct-biz { display: flex; align-items: center; gap: var(--s-2); color: inherit; text-decoration: none; max-width: 190px; }
+.acct-biz { display: flex; align-items: center; gap: var(--s-2); color: inherit; text-decoration: none; max-width: 170px; }
 .acct-biz:hover { color: var(--accent); }
 .acct-biz__n { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: var(--step--1); color: var(--muted); }
 .acct-meter { display: flex; gap: 3px; margin-top: 5px; padding-left: 26px; }
 .acct-meter i { width: 10px; height: 4px; border-radius: 1px; background: var(--muted); opacity: 0.3; }
 .acct-meter i[data-on='true'] { background: var(--positive); opacity: 1; box-shadow: 0 0 6px var(--positive); }
 .acct-cell {
-  display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; max-width: 156px; min-height: 30px;
-  padding: 4px 8px; border: 1px solid transparent; border-radius: var(--r-sm); background: none;
+  display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; max-width: 132px; min-height: 30px;
+  padding: 4px 6px; border: 1px solid transparent; border-radius: var(--r-sm); background: none;
   color: inherit; font: inherit; font-size: var(--step--1); text-align: left; cursor: pointer;
 }
 .acct-cell:hover { background: var(--sunk); }
