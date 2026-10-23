@@ -1,4 +1,4 @@
-import type { AppState, MoneyField, Payment } from '@shared/schema.ts'
+import type { Account, AppState, MoneyField, Payment } from '@shared/schema.ts'
 import * as core from '@shared/core.ts'
 import { readAll, write } from './github.ts'
 import type { RemoteFile } from './github.ts'
@@ -21,6 +21,7 @@ function state(): AppState {
     foundation: c.root.get('foundation.md')!.text,
     todos: c.root.get('todos.md')!.text,
     payments: c.root.get('payments.md')!.text,
+    accounts: c.root.get('accounts.md')!.text,
   })
 }
 
@@ -73,3 +74,11 @@ const payments = (change: (f: ReturnType<typeof core.parsePayments>) => ReturnTy
 export const savePayment = (p: Partial<Payment>) => payments((f) => core.upsertPayment(f, p), `payment ${p.name ?? p.id}`)
 export const payPayment = (id: string) => payments((f) => core.markPaid(f, id, today()), `paid ${id}`)
 export const removePayment = (id: string) => payments((f) => core.deletePayment(f, id), `delete payment ${id}`)
+
+const accounts = (change: (list: Account[]) => Account[], message: string) =>
+  edit('accounts.md', (t) => core.writeAccounts(t, change(core.parseAccounts(t))), message)
+
+export const saveAccount = (a: Account) =>
+  accounts((list) => core.upsertAccount(list, a), `account #${a.business} ${a.kind}${a.value ? ` ${a.value}` : ''} (${a.status})`)
+export const removeAccount = (business: string, kind: string) =>
+  accounts((list) => core.deleteAccount(list, business, kind), `remove account #${business} ${kind}`)

@@ -73,7 +73,7 @@ async function read(path: string, sha: string): Promise<RemoteFile> {
 /** Everything the dashboard needs, read fresh from main. */
 export async function readAll(): Promise<{ root: Map<string, RemoteFile>; businesses: RemoteFile[] }> {
   const [root, biz] = await Promise.all([list(''), list('businesses')])
-  const want = ['foundation.md', 'todos.md', 'payments.md']
+  const want = ['foundation.md', 'todos.md', 'payments.md', 'accounts.md']
   const rootFiles = await Promise.all(want.map((name) => {
     const e = root.find((x) => x.name === name)
     if (!e) throw new Error(`${name} is missing from ${REPO}`)

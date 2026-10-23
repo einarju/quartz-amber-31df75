@@ -1,9 +1,9 @@
 import YAML from 'yaml'
 import type {
-  AppState, BarStat, Business, Cadence, CheckItem, Engine, Foundation, MoneyField, Payment,
-  PaymentsFile, Stage, Todo,
+  Account, AccountKind, AccountStatus, AppState, BarStat, Business, Cadence, CheckItem, Engine,
+  Foundation, MoneyField, Payment, PaymentsFile, Stage, Todo,
 } from './schema.ts'
-import { MONEY_FIELDS } from './schema.ts'
+import { ACCOUNT_KINDS, MONEY_FIELDS } from './schema.ts'
 
 /**
  * The registry's rules as pure functions over file text, so they run in the browser.
@@ -86,8 +86,7 @@ export function parseBusiness(file: string, text: string): Business {
     url: str(data.url),
     repo: str(data.repo),
     money: Object.fromEntries(MONEY_FIELDS.map((k) => [k, num(data[k])])) as Record<MoneyField, number | null>,
-    accounts: Object.entries(data).filter(([k]) => k.startsWith('acct_'))
-      .map(([k, v]) => ({ key: k.slice(5), value: str(v) || 'none' })),
+    accounts: [], // filled from accounts.md by buildState
     summary: prose(s.get('money from')),
     build,
     automation,
@@ -193,12 +192,15 @@ export function parsePayments(text: string): PaymentsFile {
   }
 }
 
-/** Rewrite payments.md: new frontmatter, the prose below it untouched. */
-export function writePayments(text: string, file: PaymentsFile): string {
+/** Replace a file's frontmatter, keeping the prose below it untouched. */
+function writeFrontmatter(text: string, data: unknown): string {
   const { lines, eol } = split(text)
   const body = lines.slice(bodyStart(lines)).join(eol)
-  return `---${eol}${YAML.stringify(file).trimEnd().split('\n').join(eol)}${eol}---${eol}${body}`
+  return `---${eol}${YAML.stringify(data).trimEnd().split('\n').join(eol)}${eol}---${eol}${body}`
 }
+
+/** Rewrite payments.md: new frontmatter, the prose below it untouched. */
+export const writePayments = (text: string, file: PaymentsFile): string => writeFrontmatter(text, file)
 
 export function upsertPayment(file: PaymentsFile, input: Partial<Payment>): PaymentsFile {
   const name = str(input.name).trim()
@@ -252,6 +254,46 @@ export function monthlyUsd(p: Payment, file: PaymentsFile): number | null {
   return p.cadence === 'yearly' ? usd / 12 : p.cadence === 'weekly' ? (usd * 52) / 12 : usd
 }
 
+/* --------------------------------------------------------------- accounts */
+
+const KIND_IDS = new Set<string>(ACCOUNT_KINDS.map((k) => k.id))
+const STATUSES: AccountStatus[] = ['planned', 'created', 'live']
+
+export function parseAccounts(text: string): Account[] {
+  const list = (frontmatter(text).accounts ?? []) as Partial<Record<keyof Account, unknown>>[]
+  return list.flatMap((a) => {
+    const kind = str(a.kind)
+    if (!KIND_IDS.has(kind)) return []
+    const status = str(a.status) as AccountStatus
+    const phone = str(a.phone)
+    return [{
+      business: str(a.business),
+      kind: kind as AccountKind,
+      value: str(a.value),
+      status: STATUSES.includes(status) ? status : 'planned',
+      phone: phone === 'main' || phone === 'second' ? phone : '',
+      note: str(a.note),
+    }]
+  })
+}
+
+export const writeAccounts = (text: string, accounts: Account[]): string => writeFrontmatter(text, { accounts })
+
+const sameSlot = (a: Account, business: string, kind: string) => a.business === business && a.kind === kind
+
+/** One account per business and kind: saving an existing slot replaces it in place. */
+export function upsertAccount(accounts: Account[], input: Account): Account[] {
+  if (!KIND_IDS.has(input.kind)) throw new Error(`Unknown account kind ${input.kind}`)
+  if (!input.business) throw new Error('An account needs a business.')
+  const clean = { ...input, value: input.value.trim(), note: input.note.replace(/[\r\n]+/g, ' ').trim() }
+  const i = accounts.findIndex((a) => sameSlot(a, input.business, input.kind))
+  if (i === -1) return [...accounts, clean]
+  return accounts.map((a, idx) => (idx === i ? clean : a))
+}
+
+export const deleteAccount = (accounts: Account[], business: string, kind: string): Account[] =>
+  accounts.filter((a) => !sameSlot(a, business, kind))
+
 /* ------------------------------------------------------------------ state */
 
 export type Files = {
@@ -259,10 +301,13 @@ export type Files = {
   foundation: string
   todos: string
   payments: string
+  accounts: string
 }
 
 export function buildState(files: Files): AppState {
+  const accounts = parseAccounts(files.accounts)
   const businesses = files.businesses.map((b) => parseBusiness(b.file, b.text)).sort((a, b) => a.id - b.id)
+    .map((b) => ({ ...b, accounts: accounts.filter((a) => a.business === String(b.id)) }))
   const payments = parsePayments(files.payments)
   const sum = (k: MoneyField) => businesses.reduce((a, b) => a + (b.money[k] ?? 0), 0)
   const active = payments.payments.filter((p) => p.active)
@@ -272,6 +317,7 @@ export function buildState(files: Files): AppState {
     foundation: parseFoundation(files.foundation),
     todos: parseTodos(files.todos),
     payments,
+    accounts,
     goalMonthlyUsd: 100_000,
     totals: {
       revenueMtdUsd: sum('revenue_mtd_usd'),

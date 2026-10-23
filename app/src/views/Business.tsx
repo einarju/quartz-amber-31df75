@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Business, CheckItem, MoneyField } from '@shared/schema.ts'
-import { ENGINE_ACCENT, ENGINE_LABEL, MONEY_FIELDS } from '@shared/schema.ts'
+import { ACCOUNT_KINDS, ENGINE_ACCENT, ENGINE_LABEL, MONEY_FIELDS } from '@shared/schema.ts'
 import { Bar, Btn, Card, Check, Empty, Eyebrow, Pill, accentGrad } from '../components/ui.tsx'
 import { setBusinessField, toggleBusiness } from '../lib/api.ts'
 import { useAppState, useStore } from '../lib/store.tsx'
@@ -96,17 +96,21 @@ export function BusinessView({ file, onGo }: { file: string; onGo: (r: string) =
           )}
         </Card>
         <MoneyFields b={b} />
-        <Card title="Accounts">
-          <table className="table">
-            <tbody>
-              {b.accounts.map((a) => (
-                <tr key={a.key}>
-                  <td className="muted">{a.key.replace(/_/g, ' ')}</td>
-                  <td className="num"><Pill tone={a.value.startsWith('live') ? 'positive' : a.value.startsWith('none') ? undefined : 'warn'} inset>{a.value}</Pill></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Card title="Accounts" actions={<a className="link small" href="#accounts">edit in The 11</a>}>
+          {b.accounts.length === 0 ? <Empty>None listed yet.</Empty> : (
+            <table className="table">
+              <tbody>
+                {b.accounts.map((a) => (
+                  <tr key={a.kind}>
+                    <td className="muted">{ACCOUNT_KINDS.find((k) => k.id === a.kind)?.label ?? a.kind}</td>
+                    <td className="truncate" style={{ maxWidth: 180 }}>{a.value}</td>
+                    <td className="num"><Pill tone={a.status === 'live' ? 'positive' : a.status === 'created' ? 'warn' : undefined} inset>
+                      {a.status === 'planned' ? 'to make' : a.status}</Pill></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
       </div>
 
