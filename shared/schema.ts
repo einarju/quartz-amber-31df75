@@ -45,6 +45,8 @@ export type Business = {
   summary: string
   build: CheckItem[]
   automation: CheckItem[]
+  /** "## Improvements": workflow upgrades that never block a stage; not counted in any bar. */
+  improvements: CheckItem[]
   buildBar: BarStat
   automationBar: BarStat
   stage: Stage

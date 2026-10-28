@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Cadence, Payment } from '@shared/schema.ts'
 import { Btn, Card, Empty, Eyebrow, Pill, Stat } from '../components/ui.tsx'
 import { payPayment, removePayment, savePayment } from '../lib/api.ts'
@@ -15,8 +15,16 @@ function Editor({ value, onClose }: { value: Partial<Payment>; onClose: () => vo
   const [p, setP] = useState<Partial<Payment>>(value)
   const set = <K extends keyof Payment>(k: K, v: Payment[K]) => setP({ ...p, [k]: v })
   const save = () => { void run(() => savePayment(p)).then(onClose) }
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // the editor renders at the top of the page while "Fill in" / "Edit" sit far below; bring it into view
+    box.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const empty = [...(box.current?.querySelectorAll<HTMLInputElement>('input:not([disabled])') ?? [])].find((i) => !i.value)
+    ;(empty ?? box.current?.querySelector<HTMLInputElement>('input:not([disabled])'))?.focus({ preventScroll: true })
+  }, [])
 
   return (
+    <div ref={box}>
     <Card title={value.id ? `Edit ${value.name}` : 'New payment'} actions={<Btn icon="x" size="sm" title="Close" onClick={onClose} />}>
       <div className="pay-form">
         <label>Name<input className="field field--sm" value={p.name ?? ''} disabled={!!value.id} onChange={(e) => set('name', e.target.value)} /></label>
@@ -39,6 +47,7 @@ function Editor({ value, onClose }: { value: Partial<Payment>; onClose: () => vo
         {value.id && <Btn variant="ghost" icon="trash" onClick={() => { void run(() => removePayment(value.id!)).then(onClose) }}>Delete</Btn>}
       </div>
     </Card>
+    </div>
   )
 }
 

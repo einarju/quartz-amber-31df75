@@ -56,6 +56,9 @@ export const toggleBusiness = (file: string, line: number) =>
 export const setBusinessField = (file: string, key: MoneyField, value: number | null) =>
   edit(biz(file), (t) => core.setField(t, key, value), `${file} ${key} = ${value ?? 'empty'}`)
 
+export const addImprovement = (file: string, text: string) =>
+  edit(biz(file), (t) => core.addImprovement(t, text), `${file} improvement`)
+
 export const toggleFoundation = (line: number) =>
   edit('foundation.md', (t) => core.toggleLine(t, line, 'foundation.md'), `tick foundation.md:${line + 1}`)
 
