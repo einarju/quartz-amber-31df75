@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Business, CheckItem, MoneyField } from '@shared/schema.ts'
 import { ACCOUNT_KINDS, ENGINE_ACCENT, ENGINE_LABEL, MONEY_FIELDS } from '@shared/schema.ts'
 import { Bar, Btn, Card, Check, Empty, Eyebrow, Pill, accentGrad } from '../components/ui.tsx'
-import { setBusinessField, toggleBusiness } from '../lib/api.ts'
+import { addImprovement, setBusinessField, toggleBusiness } from '../lib/api.ts'
 import { useAppState, useStore } from '../lib/store.tsx'
 import { STAGE_LABEL } from './Board.tsx'
 
@@ -27,6 +27,34 @@ function Checklist({ title, items, file, accentFill, pct }: {
             onChange={() => { void run(() => toggleBusiness(file, i.line)) }} />
         ))}
       </div>
+    </Card>
+  )
+}
+
+/** Workflow upgrades that never block Build or Automation; ticks here don't move any bar. */
+function Improvements({ b }: { b: Business }) {
+  const { run } = useStore()
+  const [text, setText] = useState('')
+  const open = b.improvements.filter((i) => !i.done).length
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!text.trim()) return
+    void run(() => addImprovement(b.file, text))
+    setText('')
+  }
+  return (
+    <Card title="Improvements" actions={<span className="muted small">{open} open · not counted in progress</span>}>
+      <div className="col" style={{ gap: 'var(--s-2)' }}>
+        {b.improvements.length === 0 && <Empty>Nothing yet. Ideas that make a workflow better without blocking it go here.</Empty>}
+        {b.improvements.map((i) => (
+          <Check key={i.line} label={i.text} checked={i.done}
+            onChange={() => { void run(() => toggleBusiness(b.file, i.line)) }} />
+        ))}
+      </div>
+      <form className="row" style={{ gap: 'var(--s-2)', marginTop: 'var(--s-4)' }} onSubmit={submit}>
+        <input className="field field--sm grow" value={text} placeholder="Add an improvement" onChange={(e) => setText(e.target.value)} />
+        <Btn size="sm" icon="plus" type="submit" disabled={!text.trim()}>Add</Btn>
+      </form>
     </Card>
   )
 }
@@ -88,6 +116,8 @@ export function BusinessView({ file, onGo }: { file: string; onGo: (r: string) =
         <Checklist title="Build" items={b.build} file={b.file} accentFill={fill} pct={b.buildBar.pct} />
         <Checklist title="Automation" items={b.automation} file={b.file} accentFill="var(--text)" pct={b.automationBar.pct} />
       </div>
+
+      <Improvements b={b} />
 
       <div className="grid grid--3">
         <Card title="Next steps">

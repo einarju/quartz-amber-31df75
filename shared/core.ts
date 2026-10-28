@@ -90,6 +90,7 @@ export function parseBusiness(file: string, text: string): Business {
     summary: prose(s.get('money from')),
     build,
     automation,
+    improvements: checks(s.get('improvements')),
     buildBar,
     automationBar,
     stage: stage(buildBar, automationBar),
@@ -118,6 +119,26 @@ export function setField(text: string, key: MoneyField, value: number | null): s
   const rendered = value === null || Number.isNaN(value) ? '' : String(value)
   if (i === -1) doc.lines.splice(end - 1, 0, `${key}: ${rendered}`)
   else doc.lines[i] = `${key}:${rendered ? ` ${rendered}` : ''}${re.exec(doc.lines[i]!)?.[2] ?? ''}`
+  return doc.lines.join(doc.eol)
+}
+
+/** Append "- [ ] item" to the business's "## Improvements" list, creating the section before "## Next steps" if needed. */
+export function addImprovement(text: string, item: string): string {
+  const clean = item.replace(/[\r\n]+/g, ' ').trim()
+  if (!clean) throw new Error('Write the improvement first.')
+  const doc = split(text)
+  const heading = (re: RegExp) => doc.lines.findIndex((l, i) => i >= bodyStart(doc.lines) && re.test(l))
+  let at = heading(/^## improvements\s*$/i)
+  if (at === -1) {
+    const next = heading(/^## next steps\s*$/i)
+    const pos = next === -1 ? doc.lines.length : next
+    doc.lines.splice(pos, 0, '## Improvements', '')
+    at = pos
+  }
+  let end = at + 1                                   // last line of the section's content
+  for (let i = at + 1; i < doc.lines.length && !doc.lines[i]!.startsWith('## '); i++) if (doc.lines[i]!.trim()) end = i
+  doc.lines.splice(end + 1, 0, `- [ ] ${clean}`)
+  if ((doc.lines[end + 2] ?? '').startsWith('## ')) doc.lines.splice(end + 2, 0, '')
   return doc.lines.join(doc.eol)
 }
 
