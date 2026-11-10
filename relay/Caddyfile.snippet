@@ -1,0 +1,11 @@
+# Appended to /etc/caddy/Caddyfile on the Hetzner box. Its own site block, so the
+# live.bassvision.store block is untouched. sslip.io resolves this name to the box's IP,
+# so no DNS record is needed; Caddy fetches the certificate itself. Swap in a real
+# subdomain later (DNS only / grey cloud in Cloudflare) and nothing else changes.
+
+hq.167-233-29-228.sslip.io {
+	# SSE stream and long polls: flush every write, never buffer.
+	reverse_proxy 127.0.0.1:8095 {
+		flush_interval -1
+	}
+}

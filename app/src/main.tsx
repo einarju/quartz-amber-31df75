@@ -7,6 +7,7 @@ import './styles/base.css'
 import './styles/components.css'
 import './styles/charts.css'
 import './styles/holding.css'
+import './styles/live.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

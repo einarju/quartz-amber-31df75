@@ -1,0 +1,31 @@
+# /etc/systemd/system/hq-relay.service
+# HQ Live relay (message pipe between jobs and the dashboard's Live tab), behind Caddy.
+#
+# Loopback only; the one way in is Caddy on 443. It shares the box with the Cover
+# Visualizer render workers and BassVision Live, so it is boxed in: own unprivileged
+# user, a small memory ceiling, lowest CPU priority, read-only everywhere but its state.
+
+[Unit]
+Description=HQ Live relay
+After=network.target
+
+[Service]
+User=hqrelay
+Group=hqrelay
+WorkingDirectory=/opt/hq-relay
+ExecStart=/usr/bin/node server.mjs --port 8095 --host 127.0.0.1 --data /var/lib/hq-relay --token-file /etc/hq-relay/token
+Restart=always
+RestartSec=2
+
+MemoryMax=96M
+CPUWeight=20
+Nice=10
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/hq-relay
+
+[Install]
+WantedBy=multi-user.target

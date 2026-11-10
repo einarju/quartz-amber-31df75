@@ -9,15 +9,17 @@ import { Payments } from './views/Payments.tsx'
 import { Accounts } from './views/Accounts.tsx'
 import { FoundationView } from './views/Foundation.tsx'
 import { Login } from './views/Login.tsx'
+import { Live } from './views/Live.tsx'
 
 /**
  * Shell: the neumorphic rail from the other centres, one view on the right (a bottom bar on a phone).
- * Hash routes, no router: #board, #todos, #payments, #accounts, #foundation, #biz/<file>.
+ * Hash routes, no router: #board, #live, #todos, #payments, #accounts, #foundation, #biz/<file>.
  * Signed out, the only thing rendered is the sign-in card.
  */
 
 const VIEWS = [
   { id: 'board', label: 'Board', icon: 'grid' },
+  { id: 'live', label: 'Live', icon: 'bolt' },
   { id: 'todos', label: 'To-dos', icon: 'list' },
   { id: 'payments', label: 'Payments', icon: 'card' },
   { id: 'accounts', label: 'The 11', icon: 'id' },
@@ -89,6 +91,7 @@ export default function App() {
             <>
               {route.startsWith('biz/') && <BusinessView file={route.slice(4)} onGo={go} />}
               {section === 'board' && !route.startsWith('biz/') && <Board onGo={go} />}
+              {section === 'live' && <Live onGo={go} />}
               {section === 'todos' && <Todos onGo={go} />}
               {section === 'payments' && <Payments />}
               {section === 'accounts' && <Accounts />}
