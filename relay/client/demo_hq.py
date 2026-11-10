@@ -31,6 +31,7 @@ TTL = 1800  # cards wait 30 min, then take their default
 BASE = "https://live.bassvision.store/content/"
 RUN = str(random.randint(100, 999))
 stop = threading.Event()
+BOT_ASK: list[threading.Thread] = []  # the bots card, so the demo waits for that tap too
 
 
 def nap(s: float) -> None:
@@ -64,7 +65,9 @@ def bots() -> None:
                       {"label": "Best variant", "value": "v5 momentum"}, {"label": "Worst", "value": "v3 dip-buy"}]})
         if trades == 45 and not asked:
             asked = True
-            threading.Thread(target=bots_ask, args=(jid,), daemon=True).start()
+            ask_thread = threading.Thread(target=bots_ask, args=(jid,), daemon=True)
+            BOT_ASK.append(ask_thread)
+            ask_thread.start()
         nap(2)
     job(jid, status="done", stage=2, note="Paper run paused for the night (demo)")
 
@@ -266,6 +269,10 @@ def main() -> None:
         t.start()
     for t in threads:
         t.join()
+    while not BOT_ASK:
+        time.sleep(1)  # the bots card opens after ~45 ticks; wait for it to exist
+    for t in BOT_ASK:
+        t.join()  # do not end while the bots card is still open
     nap(20)  # let the chart tick a little after the last tap
     stop.set()
     bot.join(timeout=10)
