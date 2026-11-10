@@ -22,20 +22,48 @@ const LINK_LABEL: Record<LinkState, string> = {
   off: 'not connected', connecting: 'connecting', live: 'live', offline: 'relay offline',
 }
 
+/** Business number -> name + engine colour, for the chips on every card. */
+type BizInfo = { id: number; name: string; color: string; file: string }
+function useBiz(): Map<number, BizInfo> {
+  const s = useAppState()
+  return useMemo(() => new Map(s.businesses.map((b) => [b.id, {
+    id: b.id, name: b.name, color: accentColor(ENGINE_ACCENT[b.engine]), file: b.file,
+  }])), [s.businesses])
+}
+
+function BizChip({ id, biz }: { id?: number; biz: Map<number, BizInfo> }) {
+  const b = id != null ? biz.get(id) : undefined
+  if (!b) return <span className="bizchip bizchip--none">no business</span>
+  return (
+    <span className="bizchip" style={{ '--eng': b.color } as React.CSSProperties}>
+      <b>{b.id}</b>{b.name}
+    </span>
+  )
+}
+
 export function Live({ onGo }: { onGo: (r: string) => void }) {
   const [conn, setConn] = useState<LiveConn | null>(loadConn)
   const [editing, setEditing] = useState(false)
+  const [focus, setFocus] = useState<number | null>(null)
   const live = useLive(conn)
   const now = useTick(3000)
+  const biz = useBiz()
 
-  const open = Object.values(live.decisions).filter((d) => d.status === 'open').sort((a, b) => a.created - b.created)
+  // Focus on one business filters all three columns; null shows everything.
+  const inFocus = (id?: number) => focus === null || id === focus
+  const jobs = Object.fromEntries(Object.entries(live.jobs).filter(([, j]) => inFocus(j.biz)))
+  const events = live.events.filter((e) => inFocus(e.biz))
+  const decisions = Object.values(live.decisions).filter((d) => inFocus(d.biz))
+  const open = decisions.filter((d) => d.status === 'open').sort((a, b) => a.created - b.created)
+  const openAll = Object.values(live.decisions).filter((d) => d.status === 'open').length
+  const focused = focus !== null ? biz.get(focus) : undefined
 
   // Open decisions show in the browser tab title, so a waiting card is visible from any other tab.
   useEffect(() => {
     const base = 'Holding'
-    document.title = open.length ? `(${open.length}) ${base}` : base
+    document.title = openAll ? `(${openAll}) ${base}` : base
     return () => { document.title = base }
-  }, [open.length])
+  }, [openAll])
 
   if (!conn || editing) {
     return <Connect initial={conn} onSave={(c) => { saveConn(c); setConn(c); setEditing(false) }}
@@ -53,12 +81,24 @@ export function Live({ onGo }: { onGo: (r: string) => void }) {
           </span>
         </div>
         <h1>Live</h1>
+        <p className="muted small">
+          Left: which business an agent is working on. Middle: what is running right now. Right: only what needs your tap.
+        </p>
       </header>
 
+      {focused && (
+        <div className="banner live-focus" style={{ '--eng': focused.color } as React.CSSProperties}>
+          <span className="grow">Showing only <BizChip id={focused.id} biz={biz} /></span>
+          <button className="link" onClick={() => onGo(`biz/${focused.file}`)}>open its page</button>
+          <button className="link" onClick={() => setFocus(null)}>show all</button>
+        </div>
+      )}
+
       <div className="live">
-        <TheEleven events={live.events} jobs={live.jobs} now={now} onGo={onGo} />
-        <Stage jobs={live.jobs} events={live.events} now={now} />
-        <Inbox open={open} all={Object.values(live.decisions)} now={now} onAnswer={live.answer} />
+        <TheEleven events={live.events} jobs={live.jobs} now={now} focus={focus}
+          onFocus={(id) => setFocus((f) => (f === id ? null : id))} />
+        <Stage jobs={jobs} events={events} now={now} biz={biz} />
+        <Inbox open={open} all={decisions} jobs={live.jobs} now={now} biz={biz} onAnswer={live.answer} />
       </div>
     </div>
   )
@@ -66,8 +106,8 @@ export function Live({ onGo }: { onGo: (r: string) => void }) {
 
 /* -------------------------------------------------------------- the 11 */
 
-function TheEleven({ events, jobs, now, onGo }: {
-  events: LiveEvent[]; jobs: Record<string, LiveJob>; now: number; onGo: (r: string) => void
+function TheEleven({ events, jobs, now, focus, onFocus }: {
+  events: LiveEvent[]; jobs: Record<string, LiveJob>; now: number; focus: number | null; onFocus: (id: number) => void
 }) {
   const s = useAppState()
   const last = useMemo(() => {
@@ -78,16 +118,17 @@ function TheEleven({ events, jobs, now, onGo }: {
   }, [events, jobs])
 
   return (
-    <Card title="The 11" className="live__eleven" tight>
+    <Card title="The 11" className="live__eleven" tight actions={<span className="faint small">click to focus</span>}>
       <div className="eleven">
         {s.businesses.map((b) => {
           const at = last.get(b.id)
           const hot = at !== undefined && now - at < PULSE_MS
           return (
             <button key={b.file} type="button" className="eleven__row" data-hot={hot}
+              aria-pressed={focus === b.id} data-dim={focus !== null && focus !== b.id}
               style={{ '--eng': accentColor(ENGINE_ACCENT[b.engine]) } as React.CSSProperties}
-              title={at ? `Last activity ${ago(at, now)} ago` : 'No live activity yet'}
-              onClick={() => onGo(`biz/${b.file}`)}>
+              title={at ? `Last activity ${ago(at, now)} ago. Click to show only this business.` : 'No live activity yet. Click to show only this business.'}
+              onClick={() => onFocus(b.id)}>
               <span className="eleven__num">{b.id}</span>
               <span className="eleven__name truncate">{b.name}</span>
               <span className="eleven__bars" aria-label={`Build ${b.buildBar.pct}%, Automation ${b.automationBar.pct}%`}>
@@ -106,7 +147,9 @@ function TheEleven({ events, jobs, now, onGo }: {
 
 const STATUS_ORDER: Record<string, number> = { waiting: 0, running: 1, queued: 2, failed: 3, done: 4 }
 
-function Stage({ jobs, events, now }: { jobs: Record<string, LiveJob>; events: LiveEvent[]; now: number }) {
+function Stage({ jobs, events, now, biz }: {
+  jobs: Record<string, LiveJob>; events: LiveEvent[]; now: number; biz: Map<number, BizInfo>
+}) {
   const list = Object.values(jobs)
     .sort((a, b) => (STATUS_ORDER[a.status]! - STATUS_ORDER[b.status]!) || b.updated - a.updated)
   const active = list.filter((j) => j.status !== 'done' && j.status !== 'failed')
@@ -114,13 +157,17 @@ function Stage({ jobs, events, now }: { jobs: Record<string, LiveJob>; events: L
 
   return (
     <div className="col live__stage" style={{ gap: 'var(--gutter)' }}>
+      <div className="row row--between">
+        <Eyebrow>Running now</Eyebrow>
+        <span className={`pill ${active.length ? 'pill--accent' : ''}`}>{active.length}</span>
+      </div>
       {active.length === 0 && (
         <Card>
-          <div className="empty">Nothing running. A job shows up here the moment it starts.</div>
+          <div className="empty">Nothing running right now. A job appears here the moment it starts, with its steps and clips.</div>
         </Card>
       )}
-      {active.map((j) => <JobCard key={j.id} job={j} now={now} />)}
-      <FileMap events={events} now={now} />
+      {active.map((j) => <JobCard key={j.id} job={j} now={now} biz={biz} />)}
+      <FileMap events={events} now={now} biz={biz} />
       {recent.length > 0 && (
         <Card title="Finished" tight>
           <div className="col" style={{ gap: 'var(--s-2)' }}>
@@ -128,6 +175,7 @@ function Stage({ jobs, events, now }: { jobs: Record<string, LiveJob>; events: L
               <div key={j.id} className="row row--between small">
                 <span className="row truncate" style={{ gap: 'var(--s-2)' }}>
                   <span className={`rundot ${j.status === 'failed' ? 'rundot--bad' : 'rundot--ok'}`} />
+                  <BizChip id={j.biz} biz={biz} />
                   <span className="truncate">{j.title}</span>
                 </span>
                 <span className="muted">{j.note ? `${j.note} · ` : ''}{ago(j.updated, now)}</span>
@@ -140,10 +188,10 @@ function Stage({ jobs, events, now }: { jobs: Record<string, LiveJob>; events: L
   )
 }
 
-function JobCard({ job, now }: { job: LiveJob; now: number }) {
+function JobCard({ job, now, biz }: { job: LiveJob; now: number; biz: Map<number, BizInfo> }) {
   const waiting = job.status === 'waiting'
   return (
-    <Card className="job" title={job.title} actions={
+    <Card className="job" title={<span className="row" style={{ gap: 'var(--s-3)' }}><BizChip id={job.biz} biz={biz} />{job.title}</span>} actions={
       <span className={`pill ${waiting ? 'pill--warn' : 'pill--accent'}`}>
         <span className={`rundot ${waiting ? 'rundot--wait' : 'rundot--run'}`} />
         {waiting ? 'needs you' : 'running'}{job.machine ? ` · ${job.machine}` : ''}
@@ -195,7 +243,7 @@ function Tile({ item }: { item: LiveItem }) {
 }
 
 /** Files touched in the last 10 minutes, each glowing brighter the more recent its last touch. */
-function FileMap({ events, now }: { events: LiveEvent[]; now: number }) {
+function FileMap({ events, now, biz }: { events: LiveEvent[]; now: number; biz: Map<number, BizInfo> }) {
   const files = useMemo(() => {
     const m = new Map<string, { at: number; n: number }>()
     for (const e of events) {
@@ -228,6 +276,9 @@ function FileMap({ events, now }: { events: LiveEvent[]; now: number }) {
           {feed.map((e) => (
             <li key={e.id} className="feed__row" data-kind={e.kind}>
               <span className="feed__t">{ago(e.at, now)}</span>
+              {e.biz != null && biz.has(e.biz) && (
+                <span className="feed__biz" style={{ color: biz.get(e.biz)!.color }} title={biz.get(e.biz)!.name}>#{e.biz}</span>
+              )}
               <span className="grow truncate">{e.text}</span>
               {e.machine && <span className="faint small">{e.machine}</span>}
             </li>
@@ -240,10 +291,11 @@ function FileMap({ events, now }: { events: LiveEvent[]; now: number }) {
 
 /* --------------------------------------------------------------- inbox */
 
-function Inbox({ open, all, now, onAnswer }: {
-  open: Decision[]; all: Decision[]; now: number; onAnswer: (id: string, choice: string) => Promise<void>
+function Inbox({ open, all, jobs, now, biz, onAnswer }: {
+  open: Decision[]; all: Decision[]; jobs: Record<string, LiveJob>; now: number; biz: Map<number, BizInfo>
+  onAnswer: (id: string, choice: string) => Promise<void>
 }) {
-  const answered = all.filter((d) => d.status === 'answered').sort((a, b) => b.updated - a.updated).slice(0, 5)
+  const closed = all.filter((d) => d.status !== 'open').sort((a, b) => b.updated - a.updated).slice(0, 6)
   return (
     <div className="col live__inbox" style={{ gap: 'var(--gutter)' }}>
       <div className="row row--between">
@@ -251,19 +303,24 @@ function Inbox({ open, all, now, onAnswer }: {
         <span className={`pill ${open.length ? 'pill--warn' : ''}`}>{open.length}</span>
       </div>
       {open.length === 0 && (
-        <Card tight><div className="empty">Nothing to decide. Cards land here with the preview playing.</div></Card>
+        <Card tight><div className="empty">Nothing to decide. When a job needs you, a card lands here with the clip playing.</div></Card>
       )}
-      {open.map((d) => <DecisionCard key={d.id} d={d} now={now} onAnswer={onAnswer} />)}
-      {answered.length > 0 && (
-        <Card title="You decided" tight>
-          <div className="col" style={{ gap: 'var(--s-2)' }}>
-            {answered.map((d) => (
-              <div key={d.id} className="row row--between small">
-                <span className="truncate">{d.title}</span>
-                <span className="row" style={{ gap: 'var(--s-2)', flex: 'none' }}>
-                  <span className="pill pill--accent">{d.choice}</span>
-                  <span className="muted">{ago(d.updated, now)}</span>
-                </span>
+      {open.map((d) => <DecisionCard key={d.id} d={d} job={d.job ? jobs[d.job] : undefined} now={now} biz={biz} onAnswer={onAnswer} />)}
+      {closed.length > 0 && (
+        <Card title="History" tight>
+          <div className="col" style={{ gap: 'var(--s-3)' }}>
+            {closed.map((d) => (
+              <div key={d.id} className="col" style={{ gap: 4 }}>
+                <div className="row row--between small" style={{ gap: 'var(--s-2)' }}>
+                  <span className="truncate">{d.title}</span>
+                  <span className="muted" style={{ flex: 'none' }}>{ago(d.updated, now)}</span>
+                </div>
+                <div className="row small" style={{ gap: 'var(--s-2)' }}>
+                  <BizChip id={d.biz} biz={biz} />
+                  {d.status === 'expired'
+                    ? <span className="pill pill--warn">timed out{d.choice ? `, used ${d.choice}` : ''}</span>
+                    : <span className="pill pill--accent">you: {d.choice}</span>}
+                </div>
               </div>
             ))}
           </div>
@@ -273,8 +330,11 @@ function Inbox({ open, all, now, onAnswer }: {
   )
 }
 
-function DecisionCard({ d, now, onAnswer }: { d: Decision; now: number; onAnswer: (id: string, c: string) => Promise<void> }) {
+function DecisionCard({ d, job, now, biz, onAnswer }: {
+  d: Decision; job?: LiveJob; now: number; biz: Map<number, BizInfo>; onAnswer: (id: string, c: string) => Promise<void>
+}) {
   const [err, setErr] = useState<string | null>(null)
+  const left = d.expires ? d.expires - now : null
   return (
     <section className="card decision">
       {(d.media || d.thumb) && (
@@ -285,6 +345,10 @@ function DecisionCard({ d, now, onAnswer }: { d: Decision; now: number; onAnswer
         </div>
       )}
       <div className="decision__body">
+        <div className="row" style={{ gap: 'var(--s-2)', flexWrap: 'wrap' }}>
+          <BizChip id={d.biz} biz={biz} />
+          {job && <span className="faint small truncate">{job.title}</span>}
+        </div>
         <h3 className="decision__title">{d.title}</h3>
         {d.detail && <p className="muted small">{d.detail}</p>}
         <div className="decision__opts">
@@ -296,7 +360,10 @@ function DecisionCard({ d, now, onAnswer }: { d: Decision; now: number; onAnswer
           ))}
         </div>
         {err && <p className="negative small">{err}</p>}
-        <p className="faint small">waiting {ago(d.created, now)}</p>
+        <p className="faint small">
+          waiting {ago(d.created, now)}
+          {left !== null && left > 0 && ` · if no tap in ${ago(now - left, now)}, it uses ${d.fallback ?? 'nothing'} `}
+        </p>
       </div>
     </section>
   )

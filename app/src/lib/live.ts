@@ -44,7 +44,9 @@ export type Decision = {
   media?: string
   thumb?: string
   options: string[]
-  status: 'open' | 'answered'
+  fallback?: string | null
+  expires?: number
+  status: 'open' | 'answered' | 'expired'
   choice: string | null
   created: number
   updated: number

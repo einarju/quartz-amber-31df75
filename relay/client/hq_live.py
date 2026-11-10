@@ -107,7 +107,7 @@ def ask(title: str, options: list[str], *, biz: int | None = None, job: str | No
     try:
         d = _call("POST", "/v1/decision", _drop_none({
             "title": title, "options": options, "biz": biz, "job": job, "detail": detail,
-            "media": media, "thumb": thumb}))
+            "media": media, "thumb": thumb, "ttl": int(timeout), "default": default}))
     except Exception:  # noqa: BLE001
         return default
     if not d:
@@ -118,6 +118,8 @@ def ask(title: str, options: list[str], *, biz: int | None = None, job: str | No
             r = _call("GET", f"/v1/decision/{d['id']}/wait?timeout=25", timeout=35)
             if r and r.get("status") == "answered":
                 return r.get("choice")
+            if r and r.get("status") == "expired":
+                return r.get("choice") or default
         except (urllib.error.URLError, TimeoutError, OSError):
             time.sleep(5)  # relay restarting or network blip: keep waiting
     return default

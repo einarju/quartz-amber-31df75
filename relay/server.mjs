@@ -110,6 +110,21 @@ function broadcast(type, data) {
 }
 setInterval(() => { for (const res of clients) res.write(': ping\n\n') }, 20000).unref()
 
+/** Cards nobody answered in time close as "expired" (older cards without a deadline get 6 h). */
+const DEFAULT_TTL_S = 6 * 3600
+function expireStale() {
+  const now = Date.now()
+  for (const d of Object.values(state.decisions)) {
+    if (d.status !== 'open' || now < (d.expires ?? d.created + DEFAULT_TTL_S * 1000)) continue
+    Object.assign(d, { status: 'expired', choice: d.fallback ?? null, updated: now })
+    broadcast('decision', d)
+    wake(d.id)
+    save()
+  }
+}
+setInterval(expireStale, 15000).unref()
+setTimeout(expireStale, 1000).unref()
+
 const waiters = new Map() // decision id -> Set of pending long-poll resolvers
 function wake(id) {
   const set = waiters.get(id)
@@ -180,6 +195,9 @@ function openDecision(body) {
     media: url(body.media),
     thumb: url(body.thumb),
     options,
+    // If nobody taps in time the card closes itself and the job takes `fallback`.
+    fallback: options.includes(body.default) ? body.default : null,
+    expires: Date.now() + Math.min(DAY, Math.max(60, int(body.ttl) ?? DEFAULT_TTL_S)) * 1000,
     status: 'open',
     choice: null,
     created: Date.now(),

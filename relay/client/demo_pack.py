@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from hq_live import ask, event, item, job  # noqa: E402
 
 BASE = "https://live.bassvision.store/content/"
-BIZ = 2  # Cover Visualizer / BassVision
+BIZ = 3  # Visual packs (the daily Gumroad packs)
 FAST = "--fast" in sys.argv
 STAGES = ["Panels", "Kling", "Loop gate", "4K", "Publish"]
 
