@@ -82,11 +82,15 @@ def _drop_none(d: dict) -> dict:
 
 def job(id: str, *, title: str | None = None, biz: int | None = None, stages: list[str] | None = None,
         stage: int | None = None, status: str | None = None, note: str | None = None,
-        items: list[dict] | None = None) -> dict | None:
-    """Create or update a pipeline. Items merge by id: {id, label, status, media, thumb, note}."""
+        items: list[dict] | None = None, view: str | None = None, data: dict | None = None) -> dict | None:
+    """Create or update a pipeline. Items merge by id: {id, label, status, media, thumb, note}.
+
+    view picks how the tab draws it: media (clips), build (files + tests + preview),
+    leads (cards), metric (big number + chart), doc (text being written). data is
+    that view's payload and is replaced whole on each call."""
     return _quiet("POST", "/v1/job", _drop_none({
         "id": id, "title": title, "biz": biz, "stages": stages, "stage": stage, "status": status,
-        "note": note, "items": items, "machine": MACHINE}))
+        "note": note, "items": items, "view": view, "data": data, "machine": MACHINE}))
 
 
 def item(job_id: str, item_id: str, **fields) -> dict | None:
@@ -102,12 +106,17 @@ def event(text: str, *, biz: int | None = None, job: str | None = None, kind: st
 
 def ask(title: str, options: list[str], *, biz: int | None = None, job: str | None = None,
         detail: str | None = None, media: str | None = None, thumb: str | None = None,
-        timeout: float = 3600, default: str | None = None) -> str | None:
-    """Open a decision card and wait for the tap. Returns the choice, or `default` on timeout/no relay."""
+        timeout: float = 3600, default: str | None = None, kind: str | None = None,
+        variants: list[dict] | None = None, text: str | None = None) -> str | None:
+    """Open a decision card and wait for the tap. Returns the choice, or `default` on timeout/no relay.
+
+    kind: choice (buttons, optional media) | ab (variants side by side, each
+    {label, spec|image}) | text (approve a draft passed as text)."""
     try:
         d = _call("POST", "/v1/decision", _drop_none({
             "title": title, "options": options, "biz": biz, "job": job, "detail": detail,
-            "media": media, "thumb": thumb, "ttl": int(timeout), "default": default}))
+            "media": media, "thumb": thumb, "ttl": int(timeout), "default": default,
+            "kind": kind, "variants": variants, "text": text}))
     except Exception:  # noqa: BLE001
         return default
     if not d:

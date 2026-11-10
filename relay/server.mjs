@@ -88,6 +88,13 @@ const url = (v) => {
   return s && /^(https:\/\/|http:\/\/localhost[:/])/.test(s) ? s : undefined
 }
 const STATUSES = new Set(['queued', 'running', 'waiting', 'done', 'failed'])
+const VIEWS = new Set(['media', 'build', 'leads', 'metric', 'doc'])
+/** Free-form renderer payload. Only ever rendered as text by React, so it just has to stay small. */
+const blob = (v) => {
+  if (v == null || typeof v !== 'object') return undefined
+  const s = JSON.stringify(v)
+  return s.length <= 12000 ? JSON.parse(s) : undefined
+}
 const status = (v, fallback) => (STATUSES.has(v) ? v : fallback)
 
 function cleanItem(it) {
@@ -148,6 +155,9 @@ function upsertJob(body) {
     stage: int(body.stage) ?? prev.stage ?? 0,
     status: status(body.status, prev.status ?? 'running'),
     note: body.note === undefined ? prev.note : str(body.note, 200),
+    // Which renderer the tab uses for this job, and that renderer's payload.
+    view: VIEWS.has(body.view) ? body.view : prev.view ?? 'media',
+    data: body.data === undefined ? prev.data : blob(body.data),
     updated: Date.now(),
   }
   if (Array.isArray(body.items)) {
@@ -155,7 +165,9 @@ function upsertJob(body) {
     for (const raw of body.items.slice(0, 40)) {
       const it = cleanItem(raw)
       const old = byId.get(it.id) ?? {}
-      byId.set(it.id, Object.fromEntries(Object.entries({ ...old, ...it }).filter(([, v]) => v !== undefined)))
+      // Only the fields this call sent overwrite; a status-only update keeps the label and thumbnail.
+      const sent = Object.fromEntries(Object.entries(it).filter(([k, v]) => v !== undefined && (k !== 'status' || raw.status !== undefined)))
+      byId.set(it.id, { status: 'queued', ...old, ...sent })
     }
     job.items = [...byId.values()].slice(0, 40)
   }
@@ -192,6 +204,10 @@ function openDecision(body) {
     job: str(body.job, 80),
     title: str(body.title, 120),
     detail: str(body.detail, 400),
+    // choice = buttons (+ media), ab = two previews side by side, text = approve a draft
+    kind: ['choice', 'ab', 'text'].includes(body.kind) ? body.kind : 'choice',
+    variants: Array.isArray(body.variants) ? blob(body.variants.slice(0, 3)) : undefined,
+    text: str(body.text, 1500),
     media: url(body.media),
     thumb: url(body.thumb),
     options,

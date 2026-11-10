@@ -20,6 +20,9 @@ export type LiveJob = {
   status: ItemStatus
   note?: string
   items: LiveItem[]
+  /** Which renderer draws it on the stage, and that renderer's payload (untyped on purpose). */
+  view?: 'media' | 'build' | 'leads' | 'metric' | 'doc'
+  data?: Record<string, unknown>
   created: number
   updated: number
 }
@@ -44,6 +47,9 @@ export type Decision = {
   media?: string
   thumb?: string
   options: string[]
+  kind?: 'choice' | 'ab' | 'text'
+  variants?: unknown[]
+  text?: string
   fallback?: string | null
   expires?: number
   status: 'open' | 'answered' | 'expired'
