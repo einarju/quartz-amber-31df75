@@ -407,3 +407,65 @@
 .ab { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ab__opt { min-width: 0; }
 .ab__opt .wf { zoom: 0.55; max-height: none; padding: 14px; gap: 10px; }
+
+/* ------------------------------------------------------------ prompt bar */
+
+.pbar { flex: none; display: flex; flex-direction: column; gap: 6px; }
+.pbar__row {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: 6px 6px 6px var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--sunk);
+  box-shadow: var(--press-2);
+  transition: box-shadow var(--fast) var(--ease);
+}
+.pbar[data-listening='true'] .pbar__row { box-shadow: var(--press-2), 0 0 0 1px var(--accent), 0 0 26px -6px var(--accent-glow); }
+.pbar__biz { flex: none; max-width: 150px; height: 30px; padding: 0 8px; border: 0; border-radius: var(--r-pill); background: var(--bg); color: var(--muted); font: inherit; font-size: var(--step--1); box-shadow: var(--lift-1); }
+.pbar__input { flex: 1; min-width: 0; height: 34px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--step-1); outline: none; }
+.pbar__input::placeholder { color: var(--faint); }
+.pbar__mic { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--bg); color: var(--muted); cursor: pointer; box-shadow: var(--lift-1); }
+.pbar__mic:hover { color: var(--text); }
+.pbar__mic[aria-pressed='true'] { color: var(--bg); background: var(--accent); animation: mic-pulse 1.2s ease-in-out infinite; }
+@keyframes mic-pulse { 50% { box-shadow: var(--lift-1), 0 0 0 6px var(--accent-glow); } }
+.pbar__status { display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-4); min-width: 0; animation: feed-in var(--slow) var(--ease-out); }
+
+/* ------------------------------------------------- brief / plan / result */
+
+.brief { display: flex; flex-direction: column; gap: var(--s-2); }
+.brief__goal { margin: 0; padding: var(--s-3) var(--s-4); border-radius: var(--r-md); box-shadow: var(--press-1); background: var(--sunk); color: var(--text); font-size: var(--step-0); line-height: 1.5; }
+.brief__list { margin: 0; padding-left: 18px; color: var(--muted); font-size: var(--step--1); display: flex; flex-direction: column; gap: 3px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip2 { height: 28px; padding: 0 12px; border: 0; border-radius: var(--r-pill); background: var(--bg); color: var(--faint); font: inherit; font-size: var(--step--1); cursor: pointer; box-shadow: var(--press-1); text-decoration: line-through; transition: all var(--fast) var(--ease); }
+.chip2[aria-pressed='true'] { color: var(--text); text-decoration: none; box-shadow: var(--lift-1), 0 0 0 1px var(--accent); }
+
+.plan { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.plan__step { display: flex; align-items: center; gap: var(--s-2); padding: 6px var(--s-3); border-radius: var(--r-sm); box-shadow: var(--lift-1); font-size: var(--step--1); transition: opacity var(--fast) var(--ease); }
+.plan__step[data-off='true'] { opacity: 0.4; text-decoration: line-through; box-shadow: var(--press-1); }
+.plan__n { display: grid; place-items: center; width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--accent-grad); color: var(--bg); font-weight: var(--weight-bold); font-size: var(--step--2); }
+.plan__risk { color: var(--warn); }
+
+.result { display: flex; flex-direction: column; gap: var(--s-3); }
+.ba { position: relative; height: 210px; border-radius: var(--r-md); overflow: hidden; box-shadow: var(--press-2); }
+.ba__layer { position: absolute; inset: 0; }
+/* zoom shrinks the wireframe, so it is laid out at twice the frame's size to fill it */
+.ba__layer .wf { zoom: 0.5; width: 200%; height: 200%; min-height: 0; border-radius: 0; box-shadow: none; animation: none; }
+
+/* narrower screens with a card open: the build preview goes under the files instead of being squeezed */
+@media (max-width: 1400px) {
+  .lv[data-inbox='true'] .build { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  /* the preview is the point; the file list steps aside (checks stay) while a card is open */
+  .lv[data-inbox='true'] .build__files .tree,
+  .lv[data-inbox='true'] .build__files > .eyebrow { display: none; }
+}
+.ba__after { clip-path: inset(0 0 0 var(--pos)); background: var(--bg); }
+.ba__tag { position: absolute; top: 8px; left: 10px; font-size: var(--step--2); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.ba__tag--r { left: auto; right: 10px; color: var(--accent); }
+.ba__handle { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); pointer-events: none; }
+.ba input[type='range'] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+
+/* ------------------------------------------------------- screenshot strip */
+
+.shots { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px; flex: none; }
+.shots__frame { flex: none; width: 92px; height: 64px; border-radius: 8px; overflow: hidden; opacity: 0.55; box-shadow: var(--lift-1); }
+.shots__frame[data-last='true'] { opacity: 1; box-shadow: var(--lift-1), 0 0 0 1px var(--accent); }
+.shots__frame .wf { zoom: 0.18; height: 556%; padding: 16px; border-radius: 0; box-shadow: none; animation: none; }

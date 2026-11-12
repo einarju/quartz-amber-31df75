@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ENGINE_ACCENT } from '@shared/schema.ts'
 import { Btn, Card, Eyebrow, accentColor } from '../components/ui.tsx'
 import { Icon } from '../components/Icon.tsx'
@@ -6,7 +6,7 @@ import { useAppState } from '../lib/store.tsx'
 import {
   DEFAULT_RELAY, ago, isVideo, loadConn, saveConn, useLive, useTick,
 } from '../lib/live.ts'
-import type { Decision, LinkState, LiveConn, LiveEvent, LiveItem, LiveJob } from '../lib/live.ts'
+import type { Decision, LinkState, LiveConn, LiveEvent, LiveItem, LiveJob, LivePrompt } from '../lib/live.ts'
 
 /**
  * Live: talk once, watch, tap. The layout is not fixed, it follows the work:
@@ -126,18 +126,19 @@ export function Live({ onGo }: { onGo: (r: string) => void }) {
               {dock.map((j) => (
                 <button key={j.id} type="button" className="mini" data-status={j.status} onClick={() => setPinned(j.id)}
                   style={{ '--eng': j.biz != null ? biz.get(j.biz)?.color : undefined } as React.CSSProperties}>
-                  <span className="mini__top"><span className={`rundot ${j.status === 'waiting' ? 'rundot--wait' : 'rundot--run'}`} /><b>#{j.biz ?? '?'}</b><span className="truncate">{j.title}</span></span>
+                  <span className="mini__top"><span className={`rundot ${j.status === 'waiting' ? 'rundot--wait' : 'rundot--run'}`} />{j.biz != null && <b>#{j.biz}</b>}<span className="truncate">{j.title}</span></span>
                   <MiniBody job={j} />
                 </button>
               ))}
               {hero && finished.map((j) => (
                 <div key={j.id} className="mini mini--done">
-                  <span className="mini__top"><span className={`rundot ${j.status === 'failed' ? 'rundot--bad' : 'rundot--ok'}`} /><b>#{j.biz ?? '?'}</b><span className="truncate">{j.title}</span></span>
+                  <span className="mini__top"><span className={`rundot ${j.status === 'failed' ? 'rundot--bad' : 'rundot--ok'}`} />{j.biz != null && <b>#{j.biz}</b>}<span className="truncate">{j.title}</span></span>
                   <span className="faint small truncate">{j.note || 'done'} · {ago(j.updated, now)}</span>
                 </div>
               ))}
             </div>
           )}
+          <PromptBar prompts={live.prompts} biz={biz} focus={focus} now={now} onSend={live.sendPrompt} />
           <Ticker events={events} now={now} biz={biz} />
         </main>
 
@@ -338,6 +339,13 @@ function BuildView({ job }: { job: LiveJob; events: LiveEvent[]; now: number }) 
       <div className="build__preview">
         <Eyebrow>Preview {txt(d.previewLabel) && `· ${txt(d.previewLabel)}`}</Eyebrow>
         {spec.length ? <Wireframe spec={spec} /> : <div className="empty">The preview draws itself once there is something to show.</div>}
+        {arr<Block[]>(d.shots).length > 1 && (
+          <div className="shots" aria-label="Earlier versions">
+            {arr<Block[]>(d.shots).slice(-8).map((sh, i, all) => (
+              <div key={i} className="shots__frame" data-last={i === all.length - 1}><Wireframe spec={arr<Block>(sh)} /></div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -466,6 +474,103 @@ function MiniBody({ job }: { job: LiveJob }) {
   )
 }
 
+/* ----------------------------------------------------------- prompt bar */
+
+type SpeechRec = {
+  lang: string; interimResults: boolean; continuous: boolean
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null
+  onend: (() => void) | null; onerror: (() => void) | null
+  start: () => void; stop: () => void
+}
+function speechCtor(): (new () => SpeechRec) | null {
+  const w = window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec }
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
+const PROMPT_LABEL: Record<LivePrompt['status'], string> = {
+  queued: 'sent, waiting for a session', claimed: 'a session picked it up', working: 'building', done: 'done', failed: 'failed',
+}
+
+/** Type or say what to build. Whatever runs on a machine (the demo now, a real runner later) picks it up. */
+function PromptBar({ prompts, biz, focus, now, onSend }: {
+  prompts: Record<string, LivePrompt>; biz: BizMap; focus: number | null; now: number
+  onSend: (text: string, biz?: number) => Promise<LivePrompt>
+}) {
+  const [text, setText] = useState('')
+  const [target, setTarget] = useState<number | ''>('')
+  const [listening, setListening] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const recRef = useRef<SpeechRec | null>(null)
+  const Rec = speechCtor()
+  const last = Object.values(prompts).sort((a, b) => b.created - a.created)[0]
+  const showLast = last && now - last.updated < 120_000
+
+  useEffect(() => { if (focus !== null) setTarget(focus) }, [focus])
+
+  const send = async () => {
+    const t = text.trim()
+    if (!t) return
+    setErr(null)
+    try {
+      await onSend(t, target === '' ? undefined : target)
+      setText('')
+    } catch (e) { setErr((e as Error).message) }
+  }
+
+  const mic = () => {
+    if (!Rec) return
+    if (listening) { recRef.current?.stop(); return }
+    const r = new Rec()
+    r.lang = navigator.language || 'en-US'
+    r.interimResults = true
+    r.continuous = false
+    const base = text ? `${text.trim()} ` : ''
+    r.onresult = (e) => {
+      let said = ''
+      for (let i = 0; i < e.results.length; i++) said += e.results[i]![0]!.transcript
+      setText(base + said)
+    }
+    r.onend = () => setListening(false)
+    r.onerror = () => { setListening(false); setErr('The mic did not catch that. Check Chrome has microphone access.') }
+    recRef.current = r
+    setListening(true)
+    r.start()
+  }
+
+  return (
+    <div className="pbar" data-listening={listening}>
+      <form className="pbar__row" onSubmit={(e) => { e.preventDefault(); void send() }}>
+        <select className="pbar__biz" value={target} aria-label="Which business"
+          onChange={(e) => setTarget(e.target.value === '' ? '' : Number(e.target.value))}>
+          <option value="">any</option>
+          {[...biz.values()].map((b) => <option key={b.id} value={b.id}>#{b.id} {b.name}</option>)}
+        </select>
+        <input className="pbar__input" value={text} onChange={(e) => setText(e.target.value)}
+          placeholder={listening ? 'Listening…' : 'What should we build? Type or tap the mic'} aria-label="Prompt" />
+        {Rec && (
+          <button type="button" className="pbar__mic" aria-pressed={listening} title={listening ? 'Stop' : 'Speak'} onClick={mic}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+            </svg>
+          </button>
+        )}
+        <Btn type="submit" variant="accent" size="sm" disabled={!text.trim()}>Build</Btn>
+      </form>
+      {(err || showLast) && (
+        <div className="pbar__status small">
+          {err ? <span className="negative">{err}</span> : last && (
+            <>
+              <span className={`rundot ${last.status === 'queued' ? 'rundot--wait' : last.status === 'done' ? 'rundot--ok' : 'rundot--run'}`} />
+              <span className="truncate">“{last.text}”</span>
+              <span className="muted" style={{ flex: 'none' }}>{PROMPT_LABEL[last.status]}{last.machine ? ` on ${last.machine}` : ''}</span>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------- activity */
 
 function Ticker({ events, now, biz }: { events: LiveEvent[]; now: number; biz: BizMap }) {
@@ -547,15 +652,22 @@ function HistoryList({ all, jobs, now, biz }: { all: Decision[]; jobs: LiveJob[]
 type Variant = { label?: string; spec?: Block[]; image?: string; note?: string }
 
 function DecisionCard({ d, job, now, biz, compact, onAnswer }: {
-  d: Decision; job?: LiveJob; now: number; biz: BizMap; compact: boolean; onAnswer: (id: string, c: string) => Promise<void>
+  d: Decision; job?: LiveJob; now: number; biz: BizMap; compact: boolean
+  onAnswer: (id: string, c: string, extra?: Record<string, unknown>) => Promise<void>
 }) {
   const [err, setErr] = useState<string | null>(null)
   const [openUp, setOpenUp] = useState(false)
+  const [off, setOff] = useState<string[]>([]) // scope chips / plan steps switched off
   const left = d.expires ? d.expires - now : null
-  const pick = (o: string) => { setErr(null); onAnswer(d.id, o).catch((e: Error) => setErr(e.message)) }
-  const variants = arr<Variant>((d as Decision & { variants?: unknown }).variants)
-  const kind = (d as Decision & { kind?: string }).kind ?? 'choice'
-  const text = (d as Decision & { text?: string }).text
+  const pick = (o: string) => {
+    setErr(null)
+    onAnswer(d.id, o, off.length ? { off } : undefined).catch((e: Error) => setErr(e.message))
+  }
+  const toggle = (label: string) => setOff((x) => (x.includes(label) ? x.filter((y) => y !== label) : [...x, label]))
+  const variants = arr<Variant>(d.variants)
+  const kind = d.kind ?? 'choice'
+  const text = d.text
+  const card = (d.card ?? {}) as Record<string, unknown>
 
   if (compact && !openUp) {
     return (
@@ -595,6 +707,40 @@ function DecisionCard({ d, job, now, biz, compact, onAnswer }: {
         )}
         {kind === 'text' && text && <blockquote className="draft">{text}</blockquote>}
 
+        {kind === 'brief' && (
+          <div className="brief">
+            {txt(card.goal) && <p className="brief__goal">{txt(card.goal)}</p>}
+            {arr<string>(card.scope).length > 0 && (
+              <>
+                <span className="eyebrow">In scope · tap to leave out</span>
+                <div className="chips">
+                  {arr<string>(card.scope).map((c) => (
+                    <button key={c} type="button" className="chip2" aria-pressed={!off.includes(c)} onClick={() => toggle(c)}>{c}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            {arr<string>(card.assumptions).length > 0 && (
+              <ul className="brief__list">{arr<string>(card.assumptions).map((a) => <li key={a}>{a}</li>)}</ul>
+            )}
+          </div>
+        )}
+
+        {kind === 'plan' && (
+          <ol className="plan">
+            {arr<{ label: string; risk?: string; est?: string }>(card.steps).map((s, i) => (
+              <li key={s.label} className="plan__step" data-off={off.includes(s.label)}>
+                <span className="plan__n">{i + 1}</span>
+                <span className="grow">{s.label}{s.risk && <span className="plan__risk"> · {s.risk}</span>}</span>
+                {s.est && <span className="faint small">{s.est}</span>}
+                <button type="button" className="link small" onClick={() => toggle(s.label)}>{off.includes(s.label) ? 'undo' : 'skip'}</button>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {kind === 'result' && <ResultView card={card} />}
+
         <div className="decision__opts">
           {d.options.map((o, i) => <Btn key={o} size="sm" variant={i === 0 ? 'accent' : 'plain'} onClick={() => pick(o)}>{o}</Btn>)}
         </div>
@@ -605,6 +751,24 @@ function DecisionCard({ d, job, now, biz, compact, onAnswer }: {
         </p>
       </div>
     </section>
+  )
+}
+
+/** Before/after you drag across, three plain lines, and a way to try it. */
+function ResultView({ card }: { card: Record<string, unknown> }) {
+  const [pos, setPos] = useState(50)
+  const href = safeSrc(card.url)
+  return (
+    <div className="result">
+      <div className="ba" style={{ '--pos': `${pos}%` } as React.CSSProperties}>
+        <div className="ba__layer"><Wireframe spec={arr<Block>(card.before)} /><span className="ba__tag">before</span></div>
+        <div className="ba__layer ba__after"><Wireframe spec={arr<Block>(card.after)} /><span className="ba__tag ba__tag--r">after</span></div>
+        <i className="ba__handle" />
+        <input type="range" min={0} max={100} value={pos} aria-label="Before and after" onChange={(e) => setPos(Number(e.target.value))} />
+      </div>
+      <ul className="brief__list">{arr<string>(card.lines).slice(0, 3).map((l) => <li key={l}>{l}</li>)}</ul>
+      {href && <a className="btn btn--sm" href={href} target="_blank" rel="noreferrer">Try it</a>}
+    </div>
   )
 }
 

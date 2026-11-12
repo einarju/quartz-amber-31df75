@@ -104,34 +104,55 @@ def event(text: str, *, biz: int | None = None, job: str | None = None, kind: st
         "text": text, "biz": biz, "job": job, "kind": kind, "path": path, "machine": MACHINE}))
 
 
-def ask(title: str, options: list[str], *, biz: int | None = None, job: str | None = None,
-        detail: str | None = None, media: str | None = None, thumb: str | None = None,
-        timeout: float = 3600, default: str | None = None, kind: str | None = None,
-        variants: list[dict] | None = None, text: str | None = None) -> str | None:
+def ask(title: str, options: list[str], **kw) -> str | None:
     """Open a decision card and wait for the tap. Returns the choice, or `default` on timeout/no relay.
 
     kind: choice (buttons, optional media) | ab (variants side by side, each
-    {label, spec|image}) | text (approve a draft passed as text)."""
+    {label, spec|image}) | text (approve a draft passed as text) | brief | plan | result
+    (payload in `card`, see ask_full)."""
+    return ask_full(title, options, **kw)["choice"]
+
+
+def ask_full(title: str, options: list[str], *, biz: int | None = None, job: str | None = None,
+             detail: str | None = None, media: str | None = None, thumb: str | None = None,
+             timeout: float = 3600, default: str | None = None, kind: str | None = None,
+             variants: list[dict] | None = None, text: str | None = None, card: dict | None = None) -> dict:
+    """Like ask(), but returns {"choice", "extra"}: extra is what else the tap carried, e.g. the
+    scope chips (brief) or plan steps (plan) Einar switched off, as {"off": [labels]}."""
+    fallback = {"choice": default, "extra": None}
     try:
         d = _call("POST", "/v1/decision", _drop_none({
             "title": title, "options": options, "biz": biz, "job": job, "detail": detail,
             "media": media, "thumb": thumb, "ttl": int(timeout), "default": default,
-            "kind": kind, "variants": variants, "text": text}))
+            "kind": kind, "variants": variants, "text": text, "card": card}))
     except Exception:  # noqa: BLE001
-        return default
+        return fallback
     if not d:
-        return default
+        return fallback
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             r = _call("GET", f"/v1/decision/{d['id']}/wait?timeout=25", timeout=35)
             if r and r.get("status") == "answered":
-                return r.get("choice")
+                return {"choice": r.get("choice"), "extra": r.get("extra")}
             if r and r.get("status") == "expired":
-                return r.get("choice") or default
+                return {"choice": r.get("choice") or default, "extra": None}
         except (urllib.error.URLError, TimeoutError, OSError):
             time.sleep(5)  # relay restarting or network blip: keep waiting
-    return default
+    return fallback
+
+
+def next_prompt(timeout: int = 25) -> dict | None:
+    """Claim the oldest prompt typed or spoken in the Live tab (long-polls up to `timeout` s)."""
+    try:
+        r = _call("GET", f"/v1/prompt/next?timeout={timeout}&machine={MACHINE}", timeout=timeout + 10)
+        return (r or {}).get("prompt")
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+
+
+def prompt_status(prompt_id: str, status: str, job_id: str | None = None) -> None:
+    _quiet("POST", f"/v1/prompt/{prompt_id}", _drop_none({"status": status, "job": job_id}))
 
 
 def _main(argv: list[str]) -> int:

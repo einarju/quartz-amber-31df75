@@ -50,7 +50,7 @@ if (TOKEN.length < 24) {
 
 mkdirSync(DATA_DIR, { recursive: true })
 const STATE_FILE = join(DATA_DIR, 'state.json')
-let state = { jobs: {}, events: [], decisions: {} }
+let state = { jobs: {}, events: [], decisions: {}, prompts: {} }
 try { state = { ...state, ...JSON.parse(readFileSync(STATE_FILE, 'utf8')) } } catch { /* first run */ }
 
 let saveTimer = null
@@ -205,7 +205,9 @@ function openDecision(body) {
     title: str(body.title, 120),
     detail: str(body.detail, 400),
     // choice = buttons (+ media), ab = two previews side by side, text = approve a draft
-    kind: ['choice', 'ab', 'text'].includes(body.kind) ? body.kind : 'choice',
+    // brief = understanding of a prompt (scope chips), plan = steps to approve, result = before/after
+    kind: ['choice', 'ab', 'text', 'brief', 'plan', 'result'].includes(body.kind) ? body.kind : 'choice',
+    card: blob(body.card),
     variants: Array.isArray(body.variants) ? blob(body.variants.slice(0, 3)) : undefined,
     text: str(body.text, 1500),
     media: url(body.media),
@@ -231,11 +233,64 @@ function answer(id, body) {
   if (d.status !== 'open') return d
   const choice = str(body.choice, 24)
   if (!d.options.includes(choice)) throw new HttpError(400, 'not one of the options')
-  Object.assign(d, { status: 'answered', choice, updated: Date.now() })
+  // extra = what else the tap carried, e.g. the scope chips or plan steps switched off
+  Object.assign(d, { status: 'answered', choice, extra: blob(body.extra), updated: Date.now() })
   broadcast('decision', d)
   wake(id)
   save()
   return d
+}
+
+/* ---------------------------------------------------------------- prompts */
+// Prompts typed or spoken in the Live tab. Something on a machine (the demo script now,
+// a real session runner later) long-polls /v1/prompt/next and claims them one at a time.
+
+const promptWaiters = new Set()
+
+function addPrompt(body) {
+  const text = str(body.text, 2000)?.trim()
+  if (!text) throw new HttpError(400, 'empty prompt')
+  const p = { id: randomUUID().slice(0, 12), text, biz: int(body.biz), status: 'queued', created: Date.now(), updated: Date.now() }
+  state.prompts[p.id] = p
+  const prompts = Object.values(state.prompts).sort((a, b) => b.created - a.created).slice(0, 30)
+  state.prompts = Object.fromEntries(prompts.map((x) => [x.id, x]))
+  broadcast('prompt', p)
+  for (const fn of promptWaiters) fn()
+  save()
+  return p
+}
+
+function claimPrompt(machine) {
+  const p = Object.values(state.prompts).filter((x) => x.status === 'queued').sort((a, b) => a.created - b.created)[0]
+  if (!p) return null
+  Object.assign(p, { status: 'claimed', machine: str(machine, 40), updated: Date.now() })
+  broadcast('prompt', p)
+  save()
+  return p
+}
+
+function updatePrompt(id, body) {
+  const p = state.prompts[id]
+  if (!p) throw new HttpError(404, 'no such prompt')
+  Object.assign(p, {
+    status: ['claimed', 'working', 'done', 'failed'].includes(body.status) ? body.status : p.status,
+    job: str(body.job, 80) ?? p.job,
+    updated: Date.now(),
+  })
+  broadcast('prompt', p)
+  save()
+  return p
+}
+
+async function nextPrompt(machine, ms) {
+  let p = claimPrompt(machine)
+  if (p) return p
+  await new Promise((resolve) => {
+    const done = () => { clearTimeout(t); promptWaiters.delete(done); resolve() }
+    const t = setTimeout(done, ms)
+    promptWaiters.add(done)
+  })
+  return claimPrompt(machine)
 }
 
 function waitFor(id, ms) {
@@ -316,6 +371,13 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && u.pathname === '/v1/job') return send(res, 200, upsertJob(await readJson(req)))
     if (req.method === 'POST' && u.pathname === '/v1/event') return send(res, 200, addEvent(await readJson(req)))
     if (req.method === 'POST' && u.pathname === '/v1/decision') return send(res, 200, openDecision(await readJson(req)))
+    if (req.method === 'POST' && u.pathname === '/v1/prompt') return send(res, 200, addPrompt(await readJson(req)))
+    if (req.method === 'GET' && u.pathname === '/v1/prompt/next') {
+      const ms = Math.min(25000, Math.max(0, Number(u.searchParams.get('timeout') ?? 25) * 1000))
+      return send(res, 200, { prompt: await nextPrompt(u.searchParams.get('machine'), ms) })
+    }
+    const pm = u.pathname.match(/^\/v1\/prompt\/([\w.-]{1,80})$/)
+    if (pm && req.method === 'POST') return send(res, 200, updatePrompt(pm[1], await readJson(req)))
 
     const m = u.pathname.match(/^\/v1\/decision\/([\w.-]{1,80})\/(wait|answer)$/)
     if (m && req.method === 'GET' && m[2] === 'wait') {
@@ -323,7 +385,7 @@ const server = createServer(async (req, res) => {
       await waitFor(m[1], ms)
       const d = state.decisions[m[1]]
       if (!d) throw new HttpError(404, 'no such decision')
-      return send(res, 200, { status: d.status, choice: d.choice })
+      return send(res, 200, { status: d.status, choice: d.choice, extra: d.extra ?? null })
     }
     if (m && req.method === 'POST' && m[2] === 'answer') return send(res, 200, answer(m[1], await readJson(req)))
 

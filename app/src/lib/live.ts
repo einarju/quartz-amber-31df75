@@ -47,13 +47,27 @@ export type Decision = {
   media?: string
   thumb?: string
   options: string[]
-  kind?: 'choice' | 'ab' | 'text'
+  kind?: 'choice' | 'ab' | 'text' | 'brief' | 'plan' | 'result'
   variants?: unknown[]
   text?: string
   fallback?: string | null
   expires?: number
   status: 'open' | 'answered' | 'expired'
   choice: string | null
+  /** brief | plan | result payload */
+  card?: Record<string, unknown>
+  extra?: Record<string, unknown> | null
+  created: number
+  updated: number
+}
+
+export type LivePrompt = {
+  id: string
+  text: string
+  biz?: number
+  status: 'queued' | 'claimed' | 'working' | 'done' | 'failed'
+  machine?: string
+  job?: string
   created: number
   updated: number
 }
@@ -85,6 +99,7 @@ export function useLive(conn: LiveConn | null) {
   const [jobs, setJobs] = useState<Record<string, LiveJob>>({})
   const [events, setEvents] = useState<LiveEvent[]>([])
   const [decisions, setDecisions] = useState<Record<string, Decision>>({})
+  const [prompts, setPrompts] = useState<Record<string, LivePrompt>>({})
   const [link, setLink] = useState<LinkState>(conn ? 'connecting' : 'off')
   // The relay's clock vs ours, so "2 min ago" is right even if the PC clock drifts.
   const skew = useRef(0)
@@ -96,28 +111,30 @@ export function useLive(conn: LiveConn | null) {
     const on = <T,>(type: string, fn: (d: T) => void) =>
       es.addEventListener(type, (e) => fn(JSON.parse((e as MessageEvent).data) as T))
 
-    on<{ jobs: Record<string, LiveJob>; events: LiveEvent[]; decisions: Record<string, Decision>; now: number }>('snapshot', (s) => {
+    on<{ jobs: Record<string, LiveJob>; events: LiveEvent[]; decisions: Record<string, Decision>; prompts?: Record<string, LivePrompt>; now: number }>('snapshot', (s) => {
       skew.current = Date.now() - s.now
       setJobs(s.jobs)
       setEvents(s.events)
       setDecisions(s.decisions)
+      setPrompts(s.prompts ?? {})
       setLink('live')
     })
     on<LiveJob>('job', (j) => setJobs((p) => ({ ...p, [j.id]: j })))
     on<LiveEvent>('event', (ev) => setEvents((p) => [...p.slice(-299), ev]))
     on<Decision>('decision', (d) => setDecisions((p) => ({ ...p, [d.id]: d })))
+    on<LivePrompt>('prompt', (x) => setPrompts((p) => ({ ...p, [x.id]: x })))
     es.onerror = () => setLink(es.readyState === EventSource.CLOSED ? 'offline' : 'connecting')
     return () => es.close()
   }, [conn])
 
-  const answer = useCallback(async (id: string, choice: string) => {
+  const answer = useCallback(async (id: string, choice: string, extra?: Record<string, unknown>) => {
     if (!conn) return
     // Optimistic: the card leaves at once; the relay's echo confirms it.
     setDecisions((p) => (p[id] ? { ...p, [id]: { ...p[id], status: 'answered', choice, updated: Date.now() } } : p))
     const r = await fetch(`${conn.url.replace(/\/$/, '')}/v1/decision/${encodeURIComponent(id)}/answer`, {
       method: 'POST',
       headers: { authorization: `Bearer ${conn.token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ choice }),
+      body: JSON.stringify({ choice, extra }),
     })
     if (!r.ok) {
       setDecisions((p) => (p[id] ? { ...p, [id]: { ...p[id], status: 'open', choice: null } } : p))
@@ -125,7 +142,21 @@ export function useLive(conn: LiveConn | null) {
     }
   }, [conn])
 
-  return { jobs, events, decisions, link, answer, skew: skew.current }
+  /** Send a prompt typed or spoken in the tab; whatever runs on a machine picks it up. */
+  const sendPrompt = useCallback(async (text: string, biz?: number) => {
+    if (!conn) throw new Error('not connected')
+    const r = await fetch(`${conn.url.replace(/\/$/, '')}/v1/prompt`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${conn.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ text, biz }),
+    })
+    if (!r.ok) throw new Error(`The relay said ${r.status}`)
+    const p = (await r.json()) as LivePrompt
+    setPrompts((x) => ({ ...x, [p.id]: p }))
+    return p
+  }, [conn])
+
+  return { jobs, events, decisions, prompts, link, answer, sendPrompt, skew: skew.current }
 }
 
 /** Re-render every few seconds so "ago" labels and glow decay keep moving. */
