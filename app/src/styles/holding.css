@@ -102,7 +102,7 @@
 
 /* console board: one channel strip per business, LED meters */
 .console-scroll { overflow-x: auto; padding-bottom: var(--s-2); }
-.console { display: grid; grid-template-columns: repeat(11, minmax(64px, 1fr)); gap: 8px; min-width: 760px; }
+.console { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, 1fr); gap: 8px; min-width: 760px; }
 .strip {
   all: unset; box-sizing: border-box; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
@@ -171,7 +171,7 @@
 
 @keyframes chip-flow { from { background-position: 0 0; } to { background-position: 32px 0; } }
 
-/* numbers glow in a wave from 1 to 11 */
+/* numbers glow in a wave across the businesses */
 .strip__num { animation: num-glow 4.4s ease-in-out infinite; animation-delay: calc(var(--idx) * 0.2s); }
 @keyframes num-glow {
   0%, 100% { text-shadow: none; }
