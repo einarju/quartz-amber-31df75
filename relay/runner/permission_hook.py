@@ -56,6 +56,34 @@ def is_live_call(cmd: str) -> bool:
     return len(toks) >= 3 and toks[0] in ("python3", "python") and toks[1] == CLIENT and toks[2] in ("card", "job", "event")
 
 
+def split_chain(cmd: str) -> list[str] | None:
+    """Split `a && b ; c` into its parts, respecting quotes. None if it uses pipes, redirects,
+    background `&`, subshells or substitution: those always go to a card."""
+    if any(ch in cmd for ch in "$`"):
+        return None
+    try:
+        lex = shlex.shlex(cmd, posix=False, punctuation_chars=";&|<>()")
+        lex.whitespace_split = True
+        toks = list(lex)
+    except ValueError:
+        return None
+    parts, cur = [], []
+    for t in toks:
+        if t in ("&&", ";"):
+            parts.append(" ".join(cur))
+            cur = []
+        elif set(t) <= set(";&|<>()"):
+            return None
+        else:
+            cur.append(t)
+    parts.append(" ".join(cur))
+    return [p.strip() for p in parts if p.strip()]
+
+
+def safe_part(part: str) -> bool:
+    return is_live_call(part) or any(re.fullmatch(p, part, flags=re.S) for p in SAFE_BASH)
+
+
 def decide(allow: bool, reason: str) -> None:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
@@ -95,6 +123,9 @@ def main() -> None:
             decide(True, "talking to the Live tab")
         if any(re.fullmatch(p, cmd, flags=re.S) for p in SAFE_BASH):
             decide(True, "harmless command")
+        parts = split_chain(cmd)
+        if parts and len(parts) > 1 and all(safe_part(x) for x in parts):
+            decide(True, "a chain of harmless commands")
         what = cmd
         detail = (inp.get("description") or "The session wants to run a command.").strip()
     else:

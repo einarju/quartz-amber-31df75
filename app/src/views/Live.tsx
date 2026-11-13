@@ -57,6 +57,7 @@ export function Live({ onGo }: { onGo: (r: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [focus, setFocus] = useState<number | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
+  const [dismissed, setDismissed] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<'log' | 'history' | null>(null)
   const live = useLive(conn)
   const now = useTick(2000)
@@ -76,7 +77,10 @@ export function Live({ onGo }: { onGo: (r: string) => void }) {
     .sort((a, b) => Number(b.status === 'waiting') - Number(a.status === 'waiting') || b.created - a.created)
   const finished = jobs.filter((j) => !active.includes(j)).sort((a, b) => b.updated - a.updated).slice(0, 4)
   const needsYou = open.map((d) => active.find((j) => j.id === d.job)).find(Boolean)
-  const hero = needsYou ?? active.find((j) => j.id === pinned) ?? active[0]
+  // Nothing running: a build that just finished stays on stage (20 min, or until closed) so
+  // its result, screenshot and "Open it" do not vanish the moment it is done.
+  const justDone = finished.find((j) => j.view === 'build' && j.id !== dismissed && now - j.updated < 20 * 60_000)
+  const hero = needsYou ?? active.find((j) => j.id === pinned) ?? active[0] ?? justDone
   const dock = active.filter((j) => j !== hero)
 
   useEffect(() => {
@@ -119,7 +123,7 @@ export function Live({ onGo }: { onGo: (r: string) => void }) {
 
         <main className="lv__stage">
           {hero
-            ? <Hero key={hero.id} job={hero} now={now} biz={biz} events={events} />
+            ? <Hero key={hero.id} job={hero} now={now} biz={biz} events={events} onClose={hero === justDone ? () => setDismissed(hero.id) : undefined} />
             : <Idle finished={finished} now={now} biz={biz} />}
           {(dock.length > 0 || (hero && finished.length > 0)) && (
             <div className="dock">
@@ -130,7 +134,7 @@ export function Live({ onGo }: { onGo: (r: string) => void }) {
                   <MiniBody job={j} />
                 </button>
               ))}
-              {hero && finished.map((j) => (
+              {hero && finished.filter((j) => j !== hero).map((j) => (
                 <div key={j.id} className="mini mini--done">
                   <span className="mini__top"><span className={`rundot ${j.status === 'failed' ? 'rundot--bad' : 'rundot--ok'}`} />{j.biz != null && <b>#{j.biz}</b>}<span className="truncate">{j.title}</span></span>
                   <span className="faint small truncate">{j.note || 'done'} · {ago(j.updated, now)}</span>
@@ -227,8 +231,11 @@ function Idle({ finished, now, biz }: { finished: LiveJob[]; now: number; biz: B
   )
 }
 
-function Hero({ job, now, biz, events }: { job: LiveJob; now: number; biz: BizMap; events: LiveEvent[] }) {
+function Hero({ job, now, biz, events, onClose }: {
+  job: LiveJob; now: number; biz: BizMap; events: LiveEvent[]; onClose?: () => void
+}) {
   const waiting = job.status === 'waiting'
+  const over = job.status === 'done' || job.status === 'failed'
   const b = job.biz != null ? biz.get(job.biz) : undefined
   return (
     <section className="card stg" data-view={job.view ?? 'media'} data-waiting={waiting}
@@ -239,9 +246,19 @@ function Hero({ job, now, biz, events }: { job: LiveJob; now: number; biz: BizMa
             {job.machine && <span className="faint small">on {job.machine}</span>}</span>
           <h2 className="stg__title truncate">{job.title}</h2>
         </div>
-        <span className={`pill ${waiting ? 'pill--warn' : 'pill--accent'}`}>
-          <span className={`rundot ${waiting ? 'rundot--wait' : 'rundot--run'}`} />{waiting ? 'needs you' : 'running'}
-        </span>
+        {over ? (
+          <span className="row" style={{ gap: 'var(--s-2)', flex: 'none' }}>
+            <span className={`pill ${job.status === 'failed' ? 'pill--negative' : 'pill--positive'}`}>
+              <span className={`rundot ${job.status === 'failed' ? 'rundot--bad' : 'rundot--ok'}`} />
+              {job.status === 'failed' ? 'stopped' : `done ${ago(job.updated, now)} ago`}
+            </span>
+            {onClose && <Btn size="sm" variant="ghost" icon="x" title="Clear the stage" onClick={onClose} />}
+          </span>
+        ) : (
+          <span className={`pill ${waiting ? 'pill--warn' : 'pill--accent'}`}>
+            <span className={`rundot ${waiting ? 'rundot--wait' : 'rundot--run'}`} />{waiting ? 'needs you' : 'running'}
+          </span>
+        )}
       </header>
       {job.stages.length > 0 && <Pipe job={job} />}
       {job.note && <p className="muted small stg__note">{job.note}</p>}
@@ -310,6 +327,9 @@ function BuildView({ job }: { job: LiveJob; events: LiveEvent[]; now: number }) 
   const tests = (d.tests ?? {}) as Record<string, unknown>
   const total = num(tests.total), passed = num(tests.passed), failed = num(tests.failed)
   const spec = arr<Block>(d.preview)
+  // Real screenshots from the runner's hidden Chrome win over wireframes whenever they exist.
+  const shotsImg = arr<string>(d.shots_img).map(safeSrc).filter((x): x is string => Boolean(x))
+  const pageUrl = safeSrc(d.url)
   return (
     <div className="build">
       <div className="build__files">
@@ -337,9 +357,26 @@ function BuildView({ job }: { job: LiveJob; events: LiveEvent[]; now: number }) 
         )}
       </div>
       <div className="build__preview">
-        <Eyebrow>Preview {txt(d.previewLabel) && `· ${txt(d.previewLabel)}`}</Eyebrow>
-        {spec.length ? <Wireframe spec={spec} /> : <div className="empty">The preview draws itself once there is something to show.</div>}
-        {arr<Block[]>(d.shots).length > 1 && (
+        <div className="row row--between">
+          <Eyebrow>{shotsImg.length ? 'The real page' : `Preview ${txt(d.previewLabel) && `· ${txt(d.previewLabel)}`}`}</Eyebrow>
+          {pageUrl && <a className="btn btn--sm btn--accent" href={pageUrl} target="_blank" rel="noreferrer">Open it</a>}
+        </div>
+        {shotsImg.length ? (
+          <a className="realshot" href={pageUrl ?? shotsImg.at(-1)} target="_blank" rel="noreferrer" title="Open the page">
+            <img key={shotsImg.at(-1)} src={shotsImg.at(-1)} alt="Latest screenshot of the page being built" />
+          </a>
+        ) : spec.length ? <Wireframe spec={spec} /> : <div className="empty">The preview draws itself once there is something to show.</div>}
+        {shotsImg.length > 1 && (
+          <div className="shots" aria-label="Earlier screenshots">
+            {shotsImg.slice(-8).map((src, i, all) => (
+              <a key={src} className="shots__frame shots__frame--img" data-last={i === all.length - 1} href={src} target="_blank" rel="noreferrer">
+                <img src={src} alt="" loading="lazy" />
+              </a>
+            ))}
+          </div>
+        )}
+        {txt(d.folder) && <span className="faint small truncate" title={txt(d.folder)}>Saved in {txt(d.folder)}</span>}
+        {!shotsImg.length && arr<Block[]>(d.shots).length > 1 && (
           <div className="shots" aria-label="Earlier versions">
             {arr<Block[]>(d.shots).slice(-8).map((sh, i, all) => (
               <div key={i} className="shots__frame" data-last={i === all.length - 1}><Wireframe spec={arr<Block>(sh)} /></div>
@@ -502,7 +539,7 @@ function PromptBar({ prompts, biz, focus, now, onSend }: {
   const [target, setTarget] = useState<number | ''>('')
   const [listening, setListening] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [pin, setPin] = useState(() => { try { return localStorage.getItem(PIN_KEY) ?? '' } catch { return '' } })
+  const [pin, setPin] = useState(() => { try { return (localStorage.getItem(PIN_KEY) ?? '').replace(/\D/g, '') } catch { return '' } })
   const [pinOpen, setPinOpen] = useState(false)
   const recRef = useRef<SpeechRec | null>(null)
   const Rec = speechCtor()
@@ -569,12 +606,20 @@ function PromptBar({ prompts, biz, focus, now, onSend }: {
       {pinOpen && (
         <div className="pbar__status small">
           <span className="muted" style={{ flex: 'none' }}>Launch PIN</span>
-          <input className="field field--sm" type="password" inputMode="numeric" autoComplete="off" value={pin} style={{ maxWidth: 140 }}
+          {/* Plain digits on purpose: a hidden password box let a 7th character sneak in unseen. */}
+          <input className="field field--sm" type="text" inputMode="numeric" autoComplete="off" name="hq-launch-pin"
+            data-1p-ignore data-lpignore="true" maxLength={8} value={pin} style={{ maxWidth: 120, letterSpacing: '0.2em' }}
             onChange={(e) => {
-              setPin(e.target.value)
-              try { localStorage.setItem(PIN_KEY, e.target.value) } catch { /* private window */ }
-            }} />
-          <span className="faint">stays in this browser; real sessions only start with it</span>
+              const digits = e.target.value.replace(/\D/g, '')
+              setPin(digits)
+              try { localStorage.setItem(PIN_KEY, digits) } catch { /* private window */ }
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setPinOpen(false) } }} />
+          <span className={pin.length >= 4 ? 'positive' : 'faint'} style={{ flex: 'none' }}>
+            {pin ? `${pin.length} digits${pin.length >= 4 ? ' ✓' : ''}` : 'digits only'}
+          </span>
+          <Btn size="sm" onClick={() => setPinOpen(false)}>Done</Btn>
+          <span className="faint truncate">stays in this browser; real sessions only start with it</span>
         </div>
       )}
       {(err || showLast) && (
@@ -760,7 +805,7 @@ function DecisionCard({ d, job, now, biz, compact, onAnswer }: {
           </ol>
         )}
 
-        {kind === 'result' && <ResultView card={card} />}
+        {kind === 'result' && <ResultView card={card} job={job} />}
 
         <div className="decision__opts">
           {d.options.map((o, i) => <Btn key={o} size="sm" variant={i === 0 ? 'accent' : 'plain'} onClick={() => pick(o)}>{o}</Btn>)}
@@ -776,19 +821,25 @@ function DecisionCard({ d, job, now, biz, compact, onAnswer }: {
 }
 
 /** Before/after you drag across, three plain lines, and a way to try it. */
-function ResultView({ card }: { card: Record<string, unknown> }) {
+function ResultView({ card, job }: { card: Record<string, unknown>; job?: LiveJob }) {
   const [pos, setPos] = useState(50)
-  const href = safeSrc(card.url)
+  const jd = (job?.data ?? {}) as Record<string, unknown>
+  const shots = arr<string>(jd.shots_img).map(safeSrc).filter((x): x is string => Boolean(x))
+  const href = safeSrc(card.url) ?? safeSrc(jd.url)
+  // With real screenshots: first one against the latest. Otherwise the wireframes the session sent.
+  const before = shots.length > 1 ? <img src={shots[0]} alt="first version" /> : <Wireframe spec={arr<Block>(card.before)} />
+  const after = shots.length ? <img src={shots.at(-1)} alt="latest version" /> : <Wireframe spec={arr<Block>(card.after)} />
   return (
     <div className="result">
-      <div className="ba" style={{ '--pos': `${pos}%` } as React.CSSProperties}>
-        <div className="ba__layer"><Wireframe spec={arr<Block>(card.before)} /><span className="ba__tag">before</span></div>
-        <div className="ba__layer ba__after"><Wireframe spec={arr<Block>(card.after)} /><span className="ba__tag ba__tag--r">after</span></div>
+      <div className="ba" data-img={shots.length > 0} style={{ '--pos': `${pos}%` } as React.CSSProperties}>
+        <div className="ba__layer">{before}<span className="ba__tag">{shots.length > 1 ? 'first' : 'before'}</span></div>
+        <div className="ba__layer ba__after">{after}<span className="ba__tag ba__tag--r">{shots.length ? 'now' : 'after'}</span></div>
         <i className="ba__handle" />
         <input type="range" min={0} max={100} value={pos} aria-label="Before and after" onChange={(e) => setPos(Number(e.target.value))} />
       </div>
       <ul className="brief__list">{arr<string>(card.lines).slice(0, 3).map((l) => <li key={l}>{l}</li>)}</ul>
-      {href && <a className="btn btn--sm" href={href} target="_blank" rel="noreferrer">Try it</a>}
+      {href && <a className="btn btn--sm btn--accent" href={href} target="_blank" rel="noreferrer">Open it</a>}
+      {txt(jd.folder) && <span className="faint small truncate">Saved in {txt(jd.folder)}</span>}
     </div>
   )
 }

@@ -20,7 +20,7 @@ Stages: 0 Understand, 1 Plan, 2 Build, 3 Check, 4 Result.
    `{"kind":"plan","title":"Approve the plan?","options":["approve","rethink"],"default":"approve","card":{"steps":[{"label":"...","est":"~5 min"},{"label":"...","risk":"touches a live link"}]}}`
    Mark any step that touches a live site, money, credits, accounts or messages with `risk`. Skipped steps come back in `extra.off`: do not do them. On "rethink": send one adjusted plan; if he rethinks again, stop.
 
-3. **Build.** Set stage 2. For anything with a screen, show a rough preview as you go:
+3. **Build.** Set stage 2. For a web page, put the main page at `index.html` in this folder: the runner screenshots it with a real browser after every edit and serves it at {PREVIEW}index.html, so Einar sees the real page grow. Use that address as `"url"` in the result card. Before the first real file exists you can show a rough preview:
    `python3 {CLIENT} job --data '{"preview":[{"t":"nav"},{"t":"hero"},{"t":"cards","n":3},{"t":"cta"}],"previewLabel":"draft"}'`
    Block types: nav, hero, cards (n), price (n, hi = highlighted index), toggle, faq (n), text (n), cta.
 

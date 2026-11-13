@@ -94,15 +94,93 @@ def rel(path: str) -> str:
     return m.group(1) if m else Path(path).name
 
 
+class Preview:
+    """Serves each build's worktree and its screenshots on http://localhost:4330, bound to
+    127.0.0.1 only (this Mac; never the network). /w/<prompt id>/... is the build's folder,
+    /shots/<prompt id>/<n>.png its screenshots. Read-only GETs, paths confined to those folders."""
+
+    PORT = 4330
+    SHOTS = Path.home() / ".cache" / "hq-live" / "shots"
+    CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+    def __init__(self) -> None:
+        self.roots: dict[str, Path] = {}
+        self.SHOTS.mkdir(parents=True, exist_ok=True)
+        import functools
+        import http.server
+        import threading
+
+        outer = self
+
+        class Handler(http.server.SimpleHTTPRequestHandler):
+            def translate_path(self, path: str) -> str:  # noqa: D401 - map URL to an allowed file only
+                parts = path.split("?", 1)[0].split("#", 1)[0].strip("/").split("/")
+                if len(parts) >= 2 and parts[0] in ("w", "shots"):
+                    base = outer.roots.get(parts[1]) if parts[0] == "w" else outer.SHOTS / parts[1]
+                    if base:
+                        target = (base / "/".join(parts[2:])).resolve()
+                        if str(target).startswith(str(Path(base).resolve())):
+                            return str(target)
+                return "/nonexistent"
+
+            def log_message(self, *a) -> None:  # quiet
+                pass
+
+            def end_headers(self) -> None:
+                self.send_header("Cache-Control", "no-store")
+                super().end_headers()
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", self.PORT), functools.partial(Handler, directory=str(Path.home())))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+    def register(self, pid: str, folder: Path) -> None:
+        self.roots[pid] = folder
+
+    def base(self, pid: str) -> str:
+        return f"http://localhost:{self.PORT}/w/{pid}/"
+
+    def page_url(self, pid: str) -> str | None:
+        """The build's main page: index.html at the top, else the first html file found."""
+        root = self.roots.get(pid)
+        if not root or not root.exists():
+            return None
+        if (root / "index.html").exists():
+            return self.base(pid) + "index.html"
+        for f in sorted(root.rglob("*.html")):
+            if ".git" not in f.parts and "node_modules" not in f.parts:
+                return self.base(pid) + str(f.relative_to(root))
+        return None
+
+    def screenshot(self, pid: str, url: str, n: int) -> str | None:
+        """Real screenshot with a hidden Chrome (its own throwaway profile, so the open browser is untouched)."""
+        out = self.SHOTS / pid / f"{n:03d}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        import tempfile
+        with tempfile.TemporaryDirectory() as prof:
+            try:
+                subprocess.run([self.CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--user-data-dir={prof}",
+                                # tall frame: pages often pin the headline to the bottom of a full-height hero
+                                "--window-size=1280,1500", "--virtual-time-budget=3000", f"--screenshot={out}", url],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40)
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+        return f"http://localhost:{self.PORT}/shots/{pid}/{out.name}" if out.exists() else None
+
+
+PREVIEW: Preview  # started in main(), only when the runner actually listens
+
+
 def run(p: dict) -> None:
     pid, text = p["id"], p["text"].strip()
     biz = p.get("biz")
     jid = f"run-{pid}"
     title = text if len(text) < 60 else text[:57] + "..."
 
-    if not pin_ok(p.get("pin")):
+    pin = (p.get("pin") or "").strip()
+    if not pin_ok(pin):
         prompt_status(pid, "failed")
-        event("Prompt refused: wrong or missing launch PIN (set it with the lock in the prompt bar)", biz=biz, kind="error")
+        why = "no PIN arrived" if not pin else f"the PIN that arrived has {len(pin)} characters and does not match"
+        event(f"Prompt refused: {why}. Set it with the lock in the prompt bar.", biz=biz, kind="error")
         return
 
     folders = allowlist()
@@ -111,12 +189,27 @@ def run(p: dict) -> None:
     folder = folder or ensure_scratch()
 
     files: dict[str, str] = {}
+    worktree = folder / ".claude" / "worktrees" / f"hq-{pid}"  # where `claude -w hq-<pid>` puts the session
+    PREVIEW.register(pid, worktree)
+    shots: list[str] = []
+    pending: dict[str, str] = {}  # tool_use id of an edit -> file path, screenshot once it lands
+
+    def snap() -> None:
+        url = PREVIEW.page_url(pid)
+        if not url:
+            return
+        shot = PREVIEW.screenshot(pid, url, len(shots))
+        if shot:
+            shots.append(shot)
+            job(jid, data={"shots_img": shots[-12:], "url": url})
+
     job(jid, title=title, biz=biz, view="build", stages=STAGES, stage=0, status="running",
-        note=f"Starting a Claude session in {where}", data={"files": [], "preview": [], "tests": {}})
+        note=f"Starting a Claude session in {where}",
+        data={"files": [], "preview": [], "tests": {}, "folder": str(worktree).replace(str(Path.home()), "~")})
     prompt_status(pid, "working", jid)
     event(f"Session starting in {where}: {title}", biz=biz, job=jid)
 
-    protocol = (HERE / "protocol.md").read_text().replace("{CLIENT}", str(CLIENT))
+    protocol = (HERE / "protocol.md").read_text().replace("{CLIENT}", str(CLIENT)).replace("{PREVIEW}", PREVIEW.base(pid))
     cmd = [claude_bin(), "-p", text, "--append-system-prompt", protocol, "--settings", settings_json(),
            "--permission-mode", "default", "--output-format", "stream-json", "--verbose",
            "-w", f"hq-{pid}", "--max-turns", "80", "-n", f"HQ Live: {title}"]
@@ -147,8 +240,15 @@ def run(p: dict) -> None:
                         files[path] = "active"
                         job(jid, data={"files": [{"path": k, "state": v} for k, v in files.items()]})
                         event(f"{name.lower()} {path}", biz=biz, job=jid, kind="file", path=path)
+                        if re.search(r"\.(html?|css|js|jsx|tsx|svg)$", path):
+                            pending[part.get("id", "")] = path
                     elif name == "Bash" and "hq_live.py" not in (inp.get("command") or ""):
                         event((inp.get("description") or "ran a command")[:200], biz=biz, job=jid, kind="tool")
+            elif msg.get("type") == "user":
+                # tool results: the edit has now really been written, so the screenshot shows it
+                for part in (msg.get("message") or {}).get("content") or []:
+                    if isinstance(part, dict) and part.get("type") == "tool_result" and pending.pop(part.get("tool_use_id", ""), None):
+                        snap()
             elif msg.get("type") == "result":
                 result_text = msg.get("result") or ""
                 failed = bool(msg.get("is_error"))
@@ -157,9 +257,10 @@ def run(p: dict) -> None:
 
     for k in files:
         files[k] = "edit"
+    snap()  # the final look, for the stage and the history
     summary = (result_text.strip().splitlines() or ["finished"])[0][:160]
     job(jid, status="failed" if failed else "done", stage=len(STAGES), note=summary,
-        data={"files": [{"path": k, "state": v} for k, v in files.items()]})
+        data={"files": [{"path": k, "state": v} for k, v in files.items()], "summary": result_text.strip()[:1200]})
     prompt_status(pid, "failed" if failed else "done", jid)
     event(f"Session {'failed' if failed else 'finished'}: {title}", biz=biz, job=jid, kind="error" if failed else "note")
 
@@ -190,6 +291,13 @@ def main() -> None:
         return
     if not cfg().get("launch_pin_sha256"):
         sys.exit("No launch PIN yet: run `python3 runner.py set-pin` first.")
+    global PREVIEW
+    PREVIEW = Preview()
+    # earlier builds stay openable after a restart
+    for repo in [SCRATCH, *allowlist().values()]:
+        for wt in sorted((repo / ".claude" / "worktrees").glob("hq-*")):
+            PREVIEW.register(wt.name[3:], wt)
+    print(f"Previews on http://localhost:{Preview.PORT} (this Mac only).", flush=True)
     print(f"HQ Live runner listening. Allowlist: {sorted(allowlist())} + scratch {SCRATCH}. Ctrl-C to stop.", flush=True)
     while True:
         p = next_prompt(25)
