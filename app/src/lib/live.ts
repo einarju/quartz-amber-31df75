@@ -143,12 +143,12 @@ export function useLive(conn: LiveConn | null) {
   }, [conn])
 
   /** Send a prompt typed or spoken in the tab; whatever runs on a machine picks it up. */
-  const sendPrompt = useCallback(async (text: string, biz?: number) => {
+  const sendPrompt = useCallback(async (text: string, biz?: number, pin?: string) => {
     if (!conn) throw new Error('not connected')
     const r = await fetch(`${conn.url.replace(/\/$/, '')}/v1/prompt`, {
       method: 'POST',
       headers: { authorization: `Bearer ${conn.token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ text, biz }),
+      body: JSON.stringify({ text, biz, pin }),
     })
     if (!r.ok) throw new Error(`The relay said ${r.status}`)
     const p = (await r.json()) as LivePrompt

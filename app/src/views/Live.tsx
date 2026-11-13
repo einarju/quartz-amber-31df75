@@ -487,19 +487,23 @@ function speechCtor(): (new () => SpeechRec) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
+const PIN_KEY = 'hq-live-pin'
+
 const PROMPT_LABEL: Record<LivePrompt['status'], string> = {
-  queued: 'sent, waiting for a session', claimed: 'a session picked it up', working: 'building', done: 'done', failed: 'failed',
+  queued: 'sent, waiting for a session', claimed: 'a session picked it up', working: 'building', done: 'done', failed: 'refused or failed (check the PIN)',
 }
 
 /** Type or say what to build. Whatever runs on a machine (the demo now, a real runner later) picks it up. */
 function PromptBar({ prompts, biz, focus, now, onSend }: {
   prompts: Record<string, LivePrompt>; biz: BizMap; focus: number | null; now: number
-  onSend: (text: string, biz?: number) => Promise<LivePrompt>
+  onSend: (text: string, biz?: number, pin?: string) => Promise<LivePrompt>
 }) {
   const [text, setText] = useState('')
   const [target, setTarget] = useState<number | ''>('')
   const [listening, setListening] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [pin, setPin] = useState(() => { try { return localStorage.getItem(PIN_KEY) ?? '' } catch { return '' } })
+  const [pinOpen, setPinOpen] = useState(false)
   const recRef = useRef<SpeechRec | null>(null)
   const Rec = speechCtor()
   const last = Object.values(prompts).sort((a, b) => b.created - a.created)[0]
@@ -512,7 +516,7 @@ function PromptBar({ prompts, biz, focus, now, onSend }: {
     if (!t) return
     setErr(null)
     try {
-      await onSend(t, target === '' ? undefined : target)
+      await onSend(t, target === '' ? undefined : target, pin || undefined)
       setText('')
     } catch (e) { setErr((e as Error).message) }
   }
@@ -554,8 +558,25 @@ function PromptBar({ prompts, biz, focus, now, onSend }: {
             </svg>
           </button>
         )}
+        <button type="button" className="pbar__mic" aria-pressed={pinOpen} title={pin ? 'Launch PIN set' : 'Set the launch PIN'}
+          onClick={() => setPinOpen(!pinOpen)} style={pin ? undefined : { color: 'var(--warn)' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="2" /><path d={pin ? 'M8 11V8a4 4 0 0 1 8 0v3' : 'M8 11V8a4 4 0 0 1 7.5-2'} />
+          </svg>
+        </button>
         <Btn type="submit" variant="accent" size="sm" disabled={!text.trim()}>Build</Btn>
       </form>
+      {pinOpen && (
+        <div className="pbar__status small">
+          <span className="muted" style={{ flex: 'none' }}>Launch PIN</span>
+          <input className="field field--sm" type="password" inputMode="numeric" autoComplete="off" value={pin} style={{ maxWidth: 140 }}
+            onChange={(e) => {
+              setPin(e.target.value)
+              try { localStorage.setItem(PIN_KEY, e.target.value) } catch { /* private window */ }
+            }} />
+          <span className="faint">stays in this browser; real sessions only start with it</span>
+        </div>
+      )}
       {(err || showLast) && (
         <div className="pbar__status small">
           {err ? <span className="negative">{err}</span> : last && (

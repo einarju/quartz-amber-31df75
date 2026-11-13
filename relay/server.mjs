@@ -157,7 +157,8 @@ function upsertJob(body) {
     note: body.note === undefined ? prev.note : str(body.note, 200),
     // Which renderer the tab uses for this job, and that renderer's payload.
     view: VIEWS.has(body.view) ? body.view : prev.view ?? 'media',
-    data: body.data === undefined ? prev.data : blob(body.data),
+    // merged key by key: the runner (files, progress) and the session (preview) both write here
+    data: body.data === undefined ? prev.data : { ...(prev.data ?? {}), ...(blob(body.data) ?? {}) },
     updated: Date.now(),
   }
   if (Array.isArray(body.items)) {
@@ -246,27 +247,33 @@ function answer(id, body) {
 // a real session runner later) long-polls /v1/prompt/next and claims them one at a time.
 
 const promptWaiters = new Set()
+/** A prompt as watchers see it: everything but the PIN. */
+const pub = (p) => { const { pin, ...rest } = p; return { ...rest, pinned: Boolean(pin) } }
 
 function addPrompt(body) {
   const text = str(body.text, 2000)?.trim()
   if (!text) throw new HttpError(400, 'empty prompt')
-  const p = { id: randomUUID().slice(0, 12), text, biz: int(body.biz), status: 'queued', created: Date.now(), updated: Date.now() }
+  // pin: the launch PIN typed in the tab. Only the runner ever sees it (claim answer), never the stream.
+  const p = { id: randomUUID().slice(0, 12), text, biz: int(body.biz), pin: str(body.pin, 64), status: 'queued', created: Date.now(), updated: Date.now() }
   state.prompts[p.id] = p
   const prompts = Object.values(state.prompts).sort((a, b) => b.created - a.created).slice(0, 30)
   state.prompts = Object.fromEntries(prompts.map((x) => [x.id, x]))
-  broadcast('prompt', p)
+  broadcast('prompt', pub(p))
   for (const fn of promptWaiters) fn()
   save()
-  return p
+  return pub(p)
 }
 
 function claimPrompt(machine) {
   const p = Object.values(state.prompts).filter((x) => x.status === 'queued').sort((a, b) => a.created - b.created)[0]
   if (!p) return null
   Object.assign(p, { status: 'claimed', machine: str(machine, 40), updated: Date.now() })
-  broadcast('prompt', p)
+  const handed = { ...p } // the runner gets the PIN once; the relay forgets it
+  p.pinned = Boolean(p.pin)
+  delete p.pin
+  broadcast('prompt', pub(p))
   save()
-  return p
+  return handed
 }
 
 function updatePrompt(id, body) {
@@ -277,12 +284,14 @@ function updatePrompt(id, body) {
     job: str(body.job, 80) ?? p.job,
     updated: Date.now(),
   })
-  broadcast('prompt', p)
+  broadcast('prompt', pub(p))
   save()
   return p
 }
 
-async function nextPrompt(machine, ms) {
+/** Long-poll for the next prompt. `gone()` says the listener hung up: a listener that was
+ *  stopped mid-poll must never be handed (and so lose) a prompt. */
+async function nextPrompt(machine, ms, gone) {
   let p = claimPrompt(machine)
   if (p) return p
   await new Promise((resolve) => {
@@ -290,7 +299,7 @@ async function nextPrompt(machine, ms) {
     const t = setTimeout(done, ms)
     promptWaiters.add(done)
   })
-  return claimPrompt(machine)
+  return gone() ? null : claimPrompt(machine)
 }
 
 function waitFor(id, ms) {
@@ -362,7 +371,7 @@ const server = createServer(async (req, res) => {
       })
       res.write('retry: 3000\n\n')
       prune()
-      res.write(`event: snapshot\ndata: ${JSON.stringify({ ...state, now: Date.now() })}\n\n`)
+      res.write(`event: snapshot\ndata: ${JSON.stringify({ ...state, prompts: Object.fromEntries(Object.entries(state.prompts).map(([k, v]) => [k, pub(v)])), now: Date.now() })}\n\n`)
       clients.add(res)
       req.on('close', () => clients.delete(res))
       return
@@ -374,7 +383,10 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && u.pathname === '/v1/prompt') return send(res, 200, addPrompt(await readJson(req)))
     if (req.method === 'GET' && u.pathname === '/v1/prompt/next') {
       const ms = Math.min(25000, Math.max(0, Number(u.searchParams.get('timeout') ?? 25) * 1000))
-      return send(res, 200, { prompt: await nextPrompt(u.searchParams.get('machine'), ms) })
+      let hungUp = false
+      res.on('close', () => { hungUp = true })
+      const p = await nextPrompt(u.searchParams.get('machine'), ms, () => hungUp || res.destroyed)
+      return send(res, 200, { prompt: p })
     }
     const pm = u.pathname.match(/^\/v1\/prompt\/([\w.-]{1,80})$/)
     if (pm && req.method === 'POST') return send(res, 200, updatePrompt(pm[1], await readJson(req)))

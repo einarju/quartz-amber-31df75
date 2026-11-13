@@ -142,6 +142,21 @@ def ask_full(title: str, options: list[str], *, biz: int | None = None, job: str
     return fallback
 
 
+def snapshot() -> dict | None:
+    """The relay's full current state (jobs, events, decisions, prompts), read from its stream."""
+    cfg = _config()
+    if not cfg:
+        return None
+    url, token = cfg
+    req = urllib.request.Request(f"{url}/v1/stream", headers={"authorization": f"Bearer {token}", "user-agent": "hq-live-client/1"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        for line in r:
+            line = line.decode().strip()
+            if line.startswith("data:"):
+                return json.loads(line[5:])
+    return None
+
+
 def next_prompt(timeout: int = 25) -> dict | None:
     """Claim the oldest prompt typed or spoken in the Live tab (long-polls up to `timeout` s)."""
     try:
@@ -155,22 +170,45 @@ def prompt_status(prompt_id: str, status: str, job_id: str | None = None) -> Non
     _quiet("POST", f"/v1/prompt/{prompt_id}", _drop_none({"status": status, "job": job_id}))
 
 
+def _env_int(name: str) -> int | None:
+    v = os.environ.get(name, "")
+    return int(v) if v.isdigit() else None
+
+
 def _main(argv: list[str]) -> int:
     import argparse
+    # Inside a session started from the Live tab, HQ_JOB and HQ_BIZ are set by the runner,
+    # so the session's commands land on its own job without repeating them.
+    env_job, env_biz = os.environ.get("HQ_JOB"), _env_int("HQ_BIZ")
     p = argparse.ArgumentParser(prog="hq_live")
     sub = p.add_subparsers(dest="cmd", required=True)
-    e = sub.add_parser("event"); e.add_argument("text"); e.add_argument("--biz", type=int)
-    e.add_argument("--job"); e.add_argument("--kind", default="note"); e.add_argument("--path")
-    j = sub.add_parser("job"); j.add_argument("id"); j.add_argument("--title"); j.add_argument("--biz", type=int)
+    e = sub.add_parser("event"); e.add_argument("text"); e.add_argument("--biz", type=int, default=env_biz)
+    e.add_argument("--job", default=env_job); e.add_argument("--kind", default="note"); e.add_argument("--path")
+    j = sub.add_parser("job"); j.add_argument("id", nargs="?", default=env_job); j.add_argument("--title"); j.add_argument("--biz", type=int, default=env_biz)
     j.add_argument("--stages"); j.add_argument("--stage", type=int); j.add_argument("--status"); j.add_argument("--note")
-    a = sub.add_parser("ask"); a.add_argument("title"); a.add_argument("options"); a.add_argument("--biz", type=int)
-    a.add_argument("--job"); a.add_argument("--detail"); a.add_argument("--media"); a.add_argument("--timeout", type=float, default=3600)
+    j.add_argument("--view"); j.add_argument("--data", help="JSON object, merged into the job's view data")
+    a = sub.add_parser("ask"); a.add_argument("title"); a.add_argument("options"); a.add_argument("--biz", type=int, default=env_biz)
+    a.add_argument("--job", default=env_job); a.add_argument("--detail"); a.add_argument("--media"); a.add_argument("--timeout", type=float, default=3600)
+    c = sub.add_parser("card", help="open any card from JSON, wait for the tap, print {choice, extra} as JSON")
+    c.add_argument("spec", help='JSON: {"kind","title","options","detail","default","card","variants","text","timeout"}')
     args = p.parse_args(argv)
+    if args.cmd == "card":
+        spec = json.loads(args.spec)
+        out = ask_full(spec["title"], spec["options"], biz=spec.get("biz", env_biz), job=spec.get("job", env_job),
+                       detail=spec.get("detail"), media=spec.get("media"), thumb=spec.get("thumb"),
+                       timeout=float(spec.get("timeout", 1800)), default=spec.get("default"), kind=spec.get("kind"),
+                       variants=spec.get("variants"), text=spec.get("text"), card=spec.get("card"))
+        print(json.dumps(out))
+        return 0 if out.get("choice") is not None else 1
     if args.cmd == "event":
         event(args.text, biz=args.biz, job=args.job, kind=args.kind, path=args.path)
     elif args.cmd == "job":
+        if not args.id:
+            print("no job id (pass one or set HQ_JOB)", file=sys.stderr)
+            return 2
         job(args.id, title=args.title, biz=args.biz, stages=args.stages.split(",") if args.stages else None,
-            stage=args.stage, status=args.status, note=args.note)
+            stage=args.stage, status=args.status, note=args.note, view=args.view,
+            data=json.loads(args.data) if args.data else None)
     else:
         choice = ask(args.title, args.options.split(","), biz=args.biz, job=args.job, detail=args.detail,
                      media=args.media, timeout=args.timeout)
