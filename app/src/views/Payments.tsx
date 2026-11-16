@@ -1,13 +1,65 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Cadence, Payment } from '@shared/schema.ts'
-import { Btn, Card, Eyebrow } from '../components/ui.tsx'
-import { payPayment, removePayment, savePayment } from '../lib/api.ts'
+import type { Cadence, Payment, Todo } from '@shared/schema.ts'
+import { ENGINE_ACCENT } from '@shared/schema.ts'
+import { Btn, Card, Check, Empty, Eyebrow, Seg, accentColor } from '../components/ui.tsx'
+import { addTodo, deleteTodo, payPayment, removePayment, savePayment, toggleTodo } from '../lib/api.ts'
 import { MONTHS, iso, occurrences, parse, today } from '../lib/dates.ts'
 import { inCurrency } from '../lib/format.ts'
 import { useAppState, useStore } from '../lib/store.tsx'
 
 const BLANK: Partial<Payment> = { name: '', amount: null, currency: 'USD', cadence: 'monthly', next_due: null, business: 'shared', card: '', note: '', active: true }
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+type Mode = 'payments' | 'tasks'
+const MODE_KEY = 'holding.calendarMode'
+function readMode(): Mode {
+  try { return localStorage.getItem(MODE_KEY) === 'tasks' ? 'tasks' : 'payments' } catch { return 'payments' }
+}
+function writeMode(m: Mode) { try { localStorage.setItem(MODE_KEY, m) } catch { /* private window: fine */ } }
+
+/** Tasks for one day: tick, delete, add. Dated to-dos in todos.md are the tasks; the calendar is just a view of them. */
+function DayTasks({ day }: { day: string }) {
+  const s = useAppState()
+  const { run } = useStore()
+  const [text, setText] = useState('')
+  const [biz, setBiz] = useState('')
+  const list = s.todos.filter((t) => t.due === day)
+  const d = parse(day)
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!text.trim()) return
+    void run(() => addTodo(text, day, biz ? Number(biz) : null))
+    setText('')
+  }
+  return (
+    <Card title={`${DOW_LONG[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`}
+      actions={<span className="muted">{list.filter((t) => t.done).length}/{list.length} done</span>}>
+      <div className="col" style={{ gap: 'var(--s-2)' }}>
+        {list.length === 0 && <Empty>No tasks this day.</Empty>}
+        {list.map((t: Todo) => {
+          const b = s.businesses.find((x) => x.id === t.business)
+          return (
+            <div key={t.line} className="row" style={{ gap: 'var(--s-2)' }}>
+              <div className="grow" style={{ minWidth: 0 }}>
+                <Check label={t.text} checked={t.done} onChange={() => { void run(() => toggleTodo(t.line)) }}
+                  meta={b ? <span className="row" style={{ gap: 4 }}><span className="dot" style={{ background: accentColor(ENGINE_ACCENT[b.engine]) }} />#{b.id} {b.name}</span> : undefined} />
+              </div>
+              <Btn icon="trash" size="sm" variant="ghost" title="Delete" onClick={() => { void run(() => deleteTodo(t.line)) }} />
+            </div>
+          )
+        })}
+      </div>
+      <form className="todo-form todo-form--day" style={{ marginTop: 'var(--s-4)' }} onSubmit={submit}>
+        <input className="field" placeholder="Add a task for this day" value={text} onChange={(e) => setText(e.target.value)} aria-label="Task" />
+        <select className="field field--sm" value={biz} onChange={(e) => setBiz(e.target.value)} aria-label="Business">
+          <option value="">No business</option>
+          {s.businesses.map((b) => <option key={b.id} value={b.id}>#{b.id} {b.name}</option>)}
+        </select>
+        <Btn type="submit" variant="accent" icon="plus">Add</Btn>
+      </form>
+    </Card>
+  )
+}
 
 /** `inline` is the always-open "add a new payment" form under the calendar: no close button, no jump-scroll. */
 function Editor({ value, onClose, inline = false }: { value: Partial<Payment>; onClose: () => void; inline?: boolean }) {
@@ -60,6 +112,10 @@ export function Payments() {
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
   const [editing, setEditing] = useState<Payment | null>(null)
   const [fresh, setFresh] = useState(0) // bumped after each add so the new-payment form starts blank again
+  const [mode, setModeState] = useState<Mode>(readMode)
+  const setMode = (m: Mode) => { setModeState(m); writeMode(m) }
+  const [day, setDay] = useState(now)
+  const bizOf = (t: Todo) => s.businesses.find((b) => b.id === t.business)
 
   const first = iso(month)
   const last = iso(new Date(month.getFullYear(), month.getMonth() + 1, 0))
@@ -71,9 +127,12 @@ export function Payments() {
 
   return (
     <div className="col" style={{ gap: 'var(--s-6)' }}>
-      <header className="page-head"><Eyebrow>Calendar of payments</Eyebrow><h1>Payments</h1></header>
+      <header className="page-head row" style={{ justifyContent: 'space-between', alignItems: 'end', flexWrap: 'wrap', gap: 'var(--s-3)' }}>
+        <div><Eyebrow>Calendar</Eyebrow><h1>{mode === 'tasks' ? 'Tasks' : 'Payments'}</h1></div>
+        <Seg<Mode> value={mode} onChange={setMode} options={[{ value: 'payments', label: 'Payments' }, { value: 'tasks', label: 'Tasks' }]} />
+      </header>
 
-      {editing && <Editor key={editing.id} value={editing} onClose={() => setEditing(null)} />}
+      {mode === 'payments' && editing && <Editor key={editing.id} value={editing} onClose={() => setEditing(null)} />}
 
       <Card title={`${MONTHS[month.getMonth()]} ${month.getFullYear()}`}
         actions={<div className="row" style={{ gap: 'var(--s-2)' }}>
@@ -86,7 +145,20 @@ export function Payments() {
           {cells.map((d, i) => d === null ? <div key={`x${i}`} className="cal__cell cal__cell--empty" /> : (
             <div key={d} className="cal__cell" data-today={d === now}>
               <span className="cal__day">{parse(d).getDate()}</span>
-              {occ.filter((o) => o.date === d).map((o) => (
+              {mode === 'tasks' && (
+                <button type="button" className="cal__pick" data-selected={d === day} aria-label={`Show tasks for ${d}`} onClick={() => setDay(d)} />
+              )}
+              {mode === 'tasks' && s.todos.filter((t) => t.due === d).map((t) => {
+                const b = bizOf(t)
+                return (
+                  <button key={t.line} type="button" className="chip chip--task" data-paid={t.done}
+                    style={b && !t.done ? { background: accentColor(ENGINE_ACCENT[b.engine]) } : undefined}
+                    title={`${b ? `#${b.id} ` : ''}${t.text}${t.done ? ' (done)' : ''}`} onClick={() => setDay(d)}>
+                    <span className="truncate">{b ? `#${b.id} ` : ''}{t.text}</span>
+                  </button>
+                )
+              })}
+              {mode === 'payments' && occ.filter((o) => o.date === d).map((o) => (
                 <button key={o.payment.id} type="button" className="chip" data-paid={o.paid}
                   title={`${o.payment.name}${o.paid ? ' (paid)' : ''}`} onClick={() => setEditing(o.payment)}>
                   <span className="truncate">{o.payment.name}</span>
@@ -98,7 +170,9 @@ export function Payments() {
         </div>
       </Card>
 
-      <Editor key={`new${fresh}`} value={BLANK} inline onClose={() => setFresh(fresh + 1)} />
+      {mode === 'payments'
+        ? <Editor key={`new${fresh}`} value={BLANK} inline onClose={() => setFresh(fresh + 1)} />
+        : <DayTasks key={day} day={day} />}
     </div>
   )
 }
