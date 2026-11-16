@@ -19,7 +19,7 @@ import { Login } from './views/Login.tsx'
 const VIEWS = [
   { id: 'board', label: 'Board', icon: 'grid' },
   { id: 'todos', label: 'To-dos', icon: 'list' },
-  { id: 'payments', label: 'Payments', icon: 'card' },
+  { id: 'payments', label: 'Calendar', icon: 'card' },
   { id: 'accounts', label: 'The 11', icon: 'id' },
   { id: 'foundation', label: 'Foundation', icon: 'layers' },
 ] as const satisfies readonly { id: string; label: string; icon: IconName }[]
