@@ -1,5 +1,6 @@
 import type { Business, Engine } from '@shared/schema.ts'
 import { ENGINE_ACCENT, ENGINE_LABEL } from '@shared/schema.ts'
+import { isImproving } from '@shared/core.ts'
 import { Card, Eyebrow, Ring, Stat, accentColor } from '../components/ui.tsx'
 import { compact, inCurrency, money } from '../lib/format.ts'
 import { occurrences, shortDate, today, addDays, toUsd } from '../lib/dates.ts'
@@ -7,7 +8,7 @@ import { useAppState } from '../lib/store.tsx'
 
 const ENGINES: Engine[] = ['visual', 'ableton', 'audience', 'launch', 'sandbox']
 
-export const STAGE_LABEL = { build: 'Building', automation: 'Automating', 'self-running': 'Self-running' } as const
+export const STAGE_LABEL = { build: 'Building', automation: 'Automating', improving: 'Improving' } as const
 
 const SEGMENTS = 16
 
@@ -63,22 +64,42 @@ function Scope() {
 /** A mixing-console channel strip per business: number, engine colour, Build and Automation meters. */
 export function Strip({ b, onGo, idx }: { b: Business; onGo: (r: string) => void; idx: number }) {
   const color = accentColor(ENGINE_ACCENT[b.engine])
+  const improving = isImproving(b)
+  const next = improving ? b.improvementsBar.next[0] : b.nextSteps[0]
   return (
-    <button type="button" className="strip" data-quarantine={b.engine === 'sandbox'}
+    <button type="button" className="strip" data-quarantine={b.engine === 'sandbox'} data-improving={improving}
       style={{ '--eng': color, '--idx': idx } as React.CSSProperties}
-      title={`#${b.id} ${b.name} · ${STAGE_LABEL[b.stage]}${b.nextSteps[0] ? `
-Next: ${b.nextSteps[0]}` : ''}`}
+      title={`#${b.id} ${b.name} · ${STAGE_LABEL[b.stage]}${improving ? ` · Improvements ${b.improvementsBar.done}/${b.improvementsBar.total}` : ''}${next ? `
+Next: ${next}` : ''}`}
       onClick={() => onGo(`biz/${b.file}`)}>
       <span className="strip__num">{b.id}</span>
       <span className="strip__chip" />
-      <span className="strip__meters">
-        <Meter pct={b.buildBar.pct} color={color} label="Build" seed={idx * 2} />
-        <Meter pct={b.automationBar.pct} color="var(--text)" label="Automation" seed={idx * 2 + 1} />
-      </span>
-      <span className="strip__readout">
-        <span>B <b>{b.buildBar.pct}</b></span>
-        <span>A <b>{b.automationBar.pct}</b></span>
-      </span>
+      {improving ? (
+        <>
+          {/* Build and Automation are done: they shrink to two thin full columns, Improvements takes the strip. */}
+          <span className="strip__meters">
+            <span className="strip__done" aria-label="Build and Automation at 100%" role="img">
+              <i style={{ background: color }} /><i />
+            </span>
+            <Meter pct={b.improvementsBar.pct} color="var(--improve)" label="Improvements" seed={idx * 2} />
+          </span>
+          <span className="strip__readout">
+            <span className="strip__readout--done">B A 100</span>
+            <span className="strip__readout--improve">I <b>{b.improvementsBar.pct}</b></span>
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="strip__meters">
+            <Meter pct={b.buildBar.pct} color={color} label="Build" seed={idx * 2} />
+            <Meter pct={b.automationBar.pct} color="var(--text)" label="Automation" seed={idx * 2 + 1} />
+          </span>
+          <span className="strip__readout">
+            <span>B <b>{b.buildBar.pct}</b></span>
+            <span>A <b>{b.automationBar.pct}</b></span>
+          </span>
+        </>
+      )}
     </button>
   )
 }
@@ -100,7 +121,7 @@ export function Board({ onGo }: { onGo: (r: string) => void }) {
       </header>
 
 
-      <Card title="The board" actions={<span className="muted small">B = Build · A = Automation · click a channel</span>}>
+      <Card title="The board" actions={<span className="muted small">B = Build · A = Automation · <span className="improve-ink">I = Improvements</span>, once B and A hit 100 · click a channel</span>}>
         <div className="console-scroll">
           <div className="console">
             {s.businesses.map((b, i) => <Strip key={b.file} b={b} onGo={onGo} idx={i} />)}

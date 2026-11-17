@@ -60,6 +60,13 @@
   --negative: #fb5b6d;
   --warn: #fbbf24;
 
+  /* Improvements: the bar a business switches to once Build and Automation
+     are both at 100%. Teal, so it never reads as an engine colour or as
+     the orange "still building" state. */
+  --improve: #2dd4bf;
+  --improve-grad: linear-gradient(135deg, #5eead4, #0d9488);
+  --improve-glow: rgba(45, 212, 191, 0.32);
+
   /* -------------------------------------------------------------- relief */
 
   /* Raised, in three depths. Small controls use 1, cards use 2, the hero
@@ -147,6 +154,9 @@
   --ghost: rgba(43, 48, 56, 0.08);
 
   --accent-glow: rgba(255, 106, 26, 0.28);
+  --improve: #0d9488;
+  --improve-grad: linear-gradient(135deg, #2dd4bf, #0f766e);
+  --improve-glow: rgba(13, 148, 136, 0.26);
   --positive: #10a37f;
   --negative: #e11d48;
 }

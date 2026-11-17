@@ -57,16 +57,23 @@ const str = (v: unknown): string => (v === null || v === undefined ? '' : String
 const num = (v: unknown): number | null =>
   typeof v === 'number' ? v : v === null || v === undefined || v === '' ? null : Number(v)
 
-/** Same scoring as scripts/progress.py: share of ticked boxes, rounded. */
+/** Same scoring as scripts/progress.py: share of ticked boxes, rounded, plus the first three open items. */
 export function bar(items: CheckItem[]): BarStat {
   const done = items.filter((i) => i.done).length
-  return { pct: items.length ? Math.round((100 * done) / items.length) : 0, done, total: items.length }
+  return {
+    pct: items.length ? Math.round((100 * done) / items.length) : 0, done, total: items.length,
+    next: items.filter((i) => !i.done).slice(0, 3).map((i) => i.text),
+  }
 }
 
-function stage(build: BarStat, auto: BarStat): Stage {
+/** Same as progress.py: build, then automation, then improving once both bars are full. */
+export function stage(build: BarStat, auto: BarStat): Stage {
   if (build.pct < 100) return 'build'
-  return auto.pct === 100 ? 'self-running' : 'automation'
+  return auto.pct === 100 ? 'improving' : 'automation'
 }
+
+/** True once a business is fully built and fully automated: its Improvements bar takes over. */
+export const isImproving = (b: { stage: Stage }): boolean => b.stage === 'improving'
 
 export function parseBusiness(file: string, text: string): Business {
   const { lines } = split(text)
@@ -74,6 +81,7 @@ export function parseBusiness(file: string, text: string): Business {
   const s = sections(lines)
   const build = checks(s.get('build'))
   const automation = checks(s.get('automation'))
+  const improvements = checks(s.get('improvements'))
   const buildBar = bar(build)
   const automationBar = bar(automation)
   return {
@@ -90,9 +98,10 @@ export function parseBusiness(file: string, text: string): Business {
     summary: prose(s.get('money from')),
     build,
     automation,
-    improvements: checks(s.get('improvements')),
+    improvements,
     buildBar,
     automationBar,
+    improvementsBar: bar(improvements),
     stage: stage(buildBar, automationBar),
     nextSteps: (s.get('next steps') ?? []).filter((r) => r.text.startsWith('- ')).map((r) => r.text.slice(2).trim()),
     notes: prose(s.get('notes')),
