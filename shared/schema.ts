@@ -23,9 +23,11 @@ export const ENGINE_LABEL: Record<Engine, string> = {
 /** One checkbox line. `line` is its 0-based line number in the file, used to toggle it. */
 export type CheckItem = { line: number; text: string; done: boolean }
 
-export type BarStat = { pct: number; done: number; total: number }
+/** `next` is the first three open items, like progress.py's `next`. */
+export type BarStat = { pct: number; done: number; total: number; next: string[] }
 
-export type Stage = 'build' | 'automation' | 'self-running'
+/** `improving` = Build and Automation both at 100%: self-running, the Improvements bar takes over. */
+export type Stage = 'build' | 'automation' | 'improving'
 
 /** The numbers kept in a manifest's frontmatter that the dashboard lets you edit. */
 export const MONEY_FIELDS = ['revenue_mtd_usd', 'ad_spend_mtd_usd', 'costs_monthly_usd', 'minutes_per_week'] as const
@@ -45,10 +47,11 @@ export type Business = {
   summary: string
   build: CheckItem[]
   automation: CheckItem[]
-  /** "## Improvements": workflow upgrades that never block a stage; not counted in any bar. */
+  /** "## Improvements": workflow upgrades that never block a stage; scored as its own bar, shown once the stage is `improving`. */
   improvements: CheckItem[]
   buildBar: BarStat
   automationBar: BarStat
+  improvementsBar: BarStat
   stage: Stage
   nextSteps: string[]
   notes: string

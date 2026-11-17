@@ -144,6 +144,19 @@
 .strip__readout b { color: var(--text); font-weight: 500; }
 [data-theme='light'] .meter i { background: rgba(0, 0, 0, 0.07); }
 
+/* improving: Build + Automation are full, so they collapse to two thin lit rails and the
+   teal Improvements meter takes the strip. The top edge turns teal too. */
+.improve-ink { color: var(--improve); }
+.strip[data-improving='true'] { border-top-color: var(--improve); }
+.strip[data-improving='true']:hover { box-shadow: var(--press-1), 0 0 0 1px var(--improve); }
+.strip__done { display: flex; gap: 3px; height: 100%; }
+.strip__done i { width: 4px; height: 100%; border-radius: 2px; background: var(--text); opacity: 0.55; }
+.strip[data-improving='true'] .meter { width: 30px; }
+.strip__readout--done { font-size: var(--step--2); color: var(--faint); letter-spacing: 0.04em; }
+.strip__readout--improve { color: var(--improve); }
+.strip__readout--improve b { color: var(--improve); }
+@media (max-width: 720px) { .strip[data-improving='true'] .meter { width: 22px; } }
+
 .console-key { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-4); margin-top: var(--s-5); }
 .console-key__group { display: flex; flex-direction: column; gap: 4px; min-width: 0; align-items: flex-start; }
 .console-key__item { font-size: var(--step--1); color: var(--muted); text-align: left; }
@@ -278,3 +291,30 @@
 .acct-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .todo-form--day { grid-template-columns: 1fr 190px auto; }
 @media (max-width: 700px) { .todo-form--day { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------------- improving businesses (teal) */
+/* Only a business with Build and Automation both at 100% gets these classes. */
+.card--improve { box-shadow: var(--lift-2), 0 10px 34px -18px var(--improve-glow); }
+.card--improve .check[aria-pressed='true'] .check__box {
+  background: var(--improve-grad);
+  box-shadow: var(--press-1), 0 6px 20px -4px var(--improve-glow);
+}
+.card--improve .check:focus-visible { outline-color: var(--improve); }
+.improve-next { margin-top: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
+.improve-next .steps li::marker { color: var(--improve); }
+
+/* finished Build / Automation: one quiet line, the list behind a disclosure */
+.done-list { padding: var(--s-4) var(--s-5); }
+.done-list__head {
+  display: flex; align-items: center; gap: var(--s-3); cursor: pointer; list-style: none;
+}
+.done-list__head::-webkit-details-marker { display: none; }
+.done-list__head::before {
+  content: ''; flex: none; width: 7px; height: 7px; margin-right: 2px;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform var(--fast) var(--ease);
+}
+.done-list[open] .done-list__head::before { transform: rotate(45deg); }
+.done-list__head:focus-visible { outline: 2px solid var(--improve); outline-offset: 4px; border-radius: var(--r-xs); }
+.done-list__title { font-size: var(--step-1); font-weight: var(--weight-bold); color: var(--muted); }
+.done-list .biz__pct { color: var(--muted); }
