@@ -61,11 +61,11 @@
   --warn: #fbbf24;
 
   /* Improvements: the bar a business switches to once Build and Automation
-     are both at 100%. Teal, so it never reads as an engine colour or as
-     the orange "still building" state. */
-  --improve: #2dd4bf;
-  --improve-grad: linear-gradient(135deg, #5eead4, #0d9488);
-  --improve-glow: rgba(45, 212, 191, 0.32);
+     are both at 100%. Red, so it never reads as a business colour (orange,
+     violet, cyan, lime, pink) or as the orange "still building" state. */
+  --improve: #ef4444;
+  --improve-grad: linear-gradient(135deg, #f87171, #dc2626);
+  --improve-glow: rgba(239, 68, 68, 0.34);
 
   /* -------------------------------------------------------------- relief */
 
@@ -154,9 +154,9 @@
   --ghost: rgba(43, 48, 56, 0.08);
 
   --accent-glow: rgba(255, 106, 26, 0.28);
-  --improve: #0d9488;
-  --improve-grad: linear-gradient(135deg, #2dd4bf, #0f766e);
-  --improve-glow: rgba(13, 148, 136, 0.26);
+  --improve: #dc2626;
+  --improve-grad: linear-gradient(135deg, #ef4444, #b91c1c);
+  --improve-glow: rgba(220, 38, 38, 0.26);
   --positive: #10a37f;
   --negative: #e11d48;
 }
