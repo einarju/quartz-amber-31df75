@@ -127,6 +127,34 @@ export type Totals = {
   unpricedPayments: number
 }
 
+/**
+ * money.json at the root of the holding repo, written by the PC (hq_money.py every 10 min, pushed when it changes).
+ * Real money from Gumroad, BassVision Live and Meta ads, in USD, Mexico City days.
+ */
+export type MoneyPeriod = {
+  gross: number
+  fees: number
+  refunds: number
+  net: number
+  ads: number
+  profit: number
+  orders: number
+  free: number
+}
+
+export type MoneyPeriodKey = 'today' | '7d' | '30d' | 'mtd' | 'last_month' | 'ytd'
+
+export type Money = {
+  asof: string // "YYYY-MM-DD HH:MM", Mexico City
+  currency: string
+  periods: Record<MoneyPeriodKey, MoneyPeriod>
+  by_business: { id: number; name: string; mtd: MoneyPeriod; '30d': MoneyPeriod; last_month: MoneyPeriod }[]
+  daily: { d: string; gross: number; net: number; ads: number; orders: number }[]
+  top_products: { name: string; business: number; orders: number; gross: number; net: number }[]
+  sources: Record<string, string>
+  fees_estimated: boolean
+}
+
 export type AppState = {
   generated: string
   businesses: Business[]
@@ -136,4 +164,6 @@ export type AppState = {
   accounts: Account[]
   totals: Totals
   goalMonthlyUsd: number
+  /** Live money from the PC; null when money.json is missing or unreadable (totals then use the hand-typed fields). */
+  money: Money | null
 }

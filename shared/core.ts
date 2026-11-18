@@ -1,7 +1,7 @@
 import YAML from 'yaml'
 import type {
   Account, AccountKind, AccountStatus, AppState, BarStat, Business, Cadence, CheckItem, Engine,
-  Foundation, MoneyField, Payment, PaymentsFile, Stage, Todo,
+  Foundation, Money, MoneyField, Payment, PaymentsFile, Stage, Todo,
 } from './schema.ts'
 import { ACCOUNT_KINDS, MONEY_FIELDS } from './schema.ts'
 
@@ -332,6 +332,30 @@ export type Files = {
   todos: string
   payments: string
   accounts: string
+  /** money.json text, when the repo has one. */
+  money?: string | null
+}
+
+const PERIOD_KEYS = ['today', '7d', '30d', 'mtd', 'last_month', 'ytd'] as const
+
+/** money.json -> Money, or null when it is missing or not the expected shape (never throws). */
+export function parseMoney(text: string | null | undefined): Money | null {
+  if (!text) return null
+  try {
+    const m = JSON.parse(text) as Money
+    const ok = typeof m.asof === 'string' && m.periods && PERIOD_KEYS.every((k) => typeof m.periods[k]?.gross === 'number')
+    if (!ok) return null
+    return {
+      ...m,
+      by_business: Array.isArray(m.by_business) ? m.by_business : [],
+      daily: Array.isArray(m.daily) ? m.daily : [],
+      top_products: Array.isArray(m.top_products) ? m.top_products : [],
+      sources: m.sources ?? {},
+      fees_estimated: Boolean(m.fees_estimated),
+    }
+  } catch {
+    return null
+  }
 }
 
 export function buildState(files: Files): AppState {
@@ -341,6 +365,7 @@ export function buildState(files: Files): AppState {
   const payments = parsePayments(files.payments)
   const sum = (k: MoneyField) => businesses.reduce((a, b) => a + (b.money[k] ?? 0), 0)
   const active = payments.payments.filter((p) => p.active)
+  const money = parseMoney(files.money)
   return {
     generated: new Date().toISOString(),
     businesses,
@@ -349,9 +374,11 @@ export function buildState(files: Files): AppState {
     payments,
     accounts,
     goalMonthlyUsd: 100_000,
+    money,
     totals: {
-      revenueMtdUsd: sum('revenue_mtd_usd'),
-      adSpendMtdUsd: sum('ad_spend_mtd_usd'),
+      // Real numbers from money.json when the PC has published it; the hand-typed fields are the fallback.
+      revenueMtdUsd: money ? money.periods.mtd.gross : sum('revenue_mtd_usd'),
+      adSpendMtdUsd: money ? money.periods.mtd.ads : sum('ad_spend_mtd_usd'),
       minutesPerWeek: sum('minutes_per_week'),
       built: businesses.filter((b) => b.buildBar.pct === 100).length,
       automated: businesses.filter((b) => b.automationBar.pct === 100).length,

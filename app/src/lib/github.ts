@@ -71,7 +71,7 @@ async function read(path: string, sha: string): Promise<RemoteFile> {
 }
 
 /** Everything the dashboard needs, read fresh from main. */
-export async function readAll(): Promise<{ root: Map<string, RemoteFile>; businesses: RemoteFile[] }> {
+export async function readAll(): Promise<{ root: Map<string, RemoteFile>; businesses: RemoteFile[]; money: RemoteFile | null }> {
   const [root, biz] = await Promise.all([list(''), list('businesses')])
   const want = ['foundation.md', 'todos.md', 'payments.md', 'accounts.md']
   const rootFiles = await Promise.all(want.map((name) => {
@@ -80,7 +80,10 @@ export async function readAll(): Promise<{ root: Map<string, RemoteFile>; busine
     return read(e.path, e.sha)
   }))
   const businesses = await Promise.all(biz.filter((e) => e.type === 'file' && e.name.endsWith('.md')).map((e) => read(e.path, e.sha)))
-  return { root: new Map(rootFiles.map((f) => [f.path, f])), businesses }
+  // money.json is written by the PC; optional, and a failed read only drops the live money numbers.
+  const m = root.find((x) => x.name === 'money.json')
+  const money = m ? await read(m.path, m.sha).catch(() => null) : null
+  return { root: new Map(rootFiles.map((f) => [f.path, f])), businesses, money }
 }
 
 function toBase64(text: string): string {

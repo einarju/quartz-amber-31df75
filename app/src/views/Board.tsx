@@ -5,6 +5,7 @@ import { Card, Eyebrow, Ring, Stat, accentColor } from '../components/ui.tsx'
 import { compact, inCurrency, money } from '../lib/format.ts'
 import { occurrences, shortDate, today, addDays, toUsd } from '../lib/dates.ts'
 import { useAppState } from '../lib/store.tsx'
+import { MoneyCard } from './MoneyCard.tsx'
 
 const ENGINES: Engine[] = ['visual', 'ableton', 'audience', 'launch', 'sandbox']
 
@@ -112,6 +113,7 @@ export function Board({ onGo }: { onGo: (r: string) => void }) {
   const nextPay = upcoming[0]
   const openTodos = s.todos.filter((x) => !x.done).length
   const avgBuild = Math.round(s.businesses.reduce((a, b) => a + b.buildBar.pct, 0) / s.businesses.length)
+  const mtd = s.money?.periods.mtd
 
   return (
     <div className="col" style={{ gap: 'var(--s-6)' }}>
@@ -149,10 +151,12 @@ export function Board({ onGo }: { onGo: (r: string) => void }) {
         <div className="hero">
           <Ring pct={t.revenueMtdUsd / s.goalMonthlyUsd} value={`$${compact(t.revenueMtdUsd)}`} label={`of $${compact(s.goalMonthlyUsd)}`} />
           <div className="hero__stats">
-            <Stat label="Revenue this month" value={money(t.revenueMtdUsd)} sub="Stage 1 goal: $100k / mo revenue" large />
+            <Stat label="Revenue this month" value={money(t.revenueMtdUsd)} large
+              sub={mtd ? `gross, live · ${money(mtd.net)} net · goal $100k / mo` : 'Stage 1 goal: $100k / mo revenue'} />
             <Stat label="Built" value={`${t.built} / ${s.businesses.length}`} sub={`average Build ${avgBuild}%`} />
             <Stat label="Automated" value={`${t.automated} / ${s.businesses.length}`} sub="Automation bar at 100%" />
-            <Stat label="Ad spend this month" value={money(t.adSpendMtdUsd)} sub="you approve every dollar" />
+            <Stat label="Ad spend this month" value={money(t.adSpendMtdUsd)}
+              sub={mtd ? `profit after ads ${money(mtd.profit)}` : 'you approve every dollar'} />
             <Stat label="Fixed costs / mo" value={money(t.monthlyCostsUsd)}
               sub={t.unpricedPayments ? `${t.unpricedPayments} payments have no amount yet` : 'all payments priced'} />
             <Stat label="Next payment" value={nextPay ? shortDate(nextPay.date) : 'none dated'}
@@ -162,6 +166,8 @@ export function Board({ onGo }: { onGo: (r: string) => void }) {
           </div>
         </div>
       </Card>
+
+      {s.money && <MoneyCard m={s.money} />}
 
       {upcoming.length > 0 && (
         <Card title="Next payments">
