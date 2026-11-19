@@ -9,7 +9,7 @@ import { today } from './dates.ts'
  * Files are cached with their GitHub sha; a save that loses a race reloads everything.
  */
 
-type Cache = { root: Map<string, RemoteFile>; businesses: RemoteFile[] }
+type Cache = { root: Map<string, RemoteFile>; businesses: RemoteFile[]; money: RemoteFile | null }
 let cache: Cache | null = null
 
 const name = (path: string) => path.split('/').pop()!
@@ -22,6 +22,7 @@ function state(): AppState {
     todos: c.root.get('todos.md')!.text,
     payments: c.root.get('payments.md')!.text,
     accounts: c.root.get('accounts.md')!.text,
+    money: c.money?.text ?? null,
   })
 }
 

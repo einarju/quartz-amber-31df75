@@ -318,3 +318,39 @@
 .done-list__head:focus-visible { outline: 2px solid var(--improve); outline-offset: 4px; border-radius: var(--r-xs); }
 .done-list__title { font-size: var(--step-1); font-weight: var(--weight-bold); color: var(--muted); }
 .done-list .biz__pct { color: var(--muted); }
+
+/* ============================================================ live money (money.json from the PC) */
+.money .card__head { flex-wrap: wrap; }
+.money__actions { gap: var(--s-3); flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 100%; }
+.money__actions .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.money__stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s-4) var(--s-5); }
+.money__split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--s-6); align-items: start; }
+.money__row { gap: var(--s-4); padding: var(--s-1) 0; border-bottom: 1px solid var(--ghost); }
+.money__row:last-child { border-bottom: 0; }
+.money__nums { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.mbars {
+  display: flex; align-items: flex-end; gap: 3px; height: 112px;
+  padding: var(--s-2); border-radius: var(--r-md); box-shadow: var(--press-1); background: var(--sunk);
+}
+.mbars__day { position: relative; flex: 1 1 0; min-width: 3px; height: 100%; }
+.mbars__day > i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: var(--r-pill); }
+.mbars__gross { background: var(--ghost); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
+.mbars__day > .mbars__net { left: 18%; right: 18%; background: var(--accent-grad); }
+.mbars__day[data-empty='true']::after {
+  content: ''; position: absolute; left: 30%; right: 30%; bottom: 0; height: 2px; border-radius: 2px; background: var(--ghost);
+}
+.mbars__axis { margin-top: var(--s-2); font-size: var(--step--2); }
+.mbars__key { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: middle; }
+.mbars__key--gross { background: var(--muted); opacity: 0.5; }
+.mbars__key--net { background: var(--accent); }
+
+@media (max-width: 1180px) {
+  .money__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .money__split { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .money__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .money__row { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .money__nums { white-space: normal; }
+}
